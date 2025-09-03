@@ -1,20 +1,599 @@
-#Chapter 3: Covariate Study
+# =====================================================================
+# Required packages
+# =====================================================================
+# Load all R packages required for the analyses in Chapters 3–7
+library(lme4)        # Mixed effects regression
+library(ggplot2)     # Plotting
+library(ggeffects)   # Predicted values from regression models
+library(tibble)      # Data manipulation
+library(kableExtra)  # Tables
+library(MuMIn)       # Model selection
+library(blmeco)      # Additional mixed-model tools
+library(sensemakr)   # Sensitivity analysis
+library(partR2)      # Partitioned R² for GLMMs
+library(circular)    # Circular statistics
+library(dplyr)       # Data manipulation
+library(tidyverse)   # Core tidyverse functions
+library(mice)        # Multiple imputation
+library(lavaan)      # SEM
+library(lavaan.mi)   # SEM with multiple imputation
 
 
+# =====================================================================
+# Chapter 3: Covariate Study
+# =====================================================================
+
+# Circular common distribution test (Pewsey et al. 2022)
+# -----------------------------------------------------
+# Test whether two or more groups (e.g., males vs. females) 
+# share the same underlying circular distribution.
+
+# Function to compute cosine and sine rank scores for circular data
+CosSinUniScores <- function(cdat) {
+  N <- length(cdat)
+  ranks <- rank(cdat, ties.method="random")
+  CosUniScores <- cos(ranks*2*pi/N)
+  SinUniScores <- sin(ranks*2*pi/N)
+  return(list(CosUniScores, SinUniScores))
+}
+
+# Function to compute Wg statistic across groups
+WgVal <- function(CSUScores, ndat, g) {
+  CosUScores <- CSUScores[[1]] ; SinUScores <- CSUScores[[2]]
+  N <- length(CosUScores) ; ndatcsum <- cumsum(ndat)
+  Wg <- 0
+  for (k in 1:g) {
+    CosUScoresk <- 0 ; SinUScoresk <- 0
+    if (k==1) {low <- 0} else {low <- ndatcsum[k-1]}
+    for (j in 1:ndat[k]) { 
+      CosUScoresk[j] <- CosUScores[j+low] 
+      SinUScoresk[j] <- SinUScores[j+low] 
+    }
+    sumCkSq <- (sum(CosUScoresk))^2 
+    sumSkSq <- (sum(SinUScoresk))^2
+    Wg <- Wg + (sumCkSq+sumSkSq)/ndat[k]
+  }
+  Wg <- 2*Wg 
+  return(Wg)
+}
+
+# Example: Male vs. female participants
+male   <- test_data[test_data$sex == "Male", ]
+female <- test_data[test_data$sex == "Female", ]
+
+m <- circular(male$Mean.Angle)
+f <- circular(female$Mean.Angle)
+
+cdat  <- c(m, f) 
+n1    <- length(m) 
+n2    <- length(f)
+ndat  <- c(n1, n2) 
+g     <- 2
+
+CSUScores <- CosSinUniScores(cdat)
+WgObs     <- WgVal(CSUScores, ndat, g)
+
+# Chi-square test for equality of circular distributions
+pchisq(WgObs, 2*(g-1), lower.tail=F)
 
 
-#Chapter 4: Timing of Tweet Posting
+# =====================================================================
+# Chapter 4: Timing of Tweet Posting
+# =====================================================================
+
+# Regression models predicting mental health (example: SMFQ score) 
+# from mean hour of tweet posting. Timing is modelled using circular 
+# terms (cos and sin of Mean.Hour). Interaction terms test moderation 
+# by sex and generation.
+
+# Subset to participants with complete SMFQ data
+smfq_time_data <- test_data[complete.cases(test_data$smfq_score),]
+
+# --- Full model: sex × generation interactions ---
+smfq_all_int <- glmer(
+  smfq_score ~ cos(Mean.Hour/24*2*pi)*sex + sin(Mean.Hour/24*2*pi)*sex +
+    cos(2*(Mean.Hour/24*2*pi))*sex + sin(2*(Mean.Hour/24*2*pi))*sex + 
+    cos(Mean.Hour/24*2*pi)*generation + sin(Mean.Hour/24*2*pi)*generation +
+    cos(2*(Mean.Hour/24*2*pi))*generation + sin(2*(Mean.Hour/24*2*pi))*generation +
+    (1|linker) + (1|Q), 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+# Partition R²: group timing predictors into cosine/sine harmonics
+a <- partR2(
+  smfq_all_int, 
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex", "cos(Mean.Hour/24 * 2 * pi):generation"), 
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex", "sin(Mean.Hour/24 * 2 * pi):generation"), 
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex", "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ), 
+  data = smfq_time_data, 
+  olre = FALSE, 
+  R2_type = "marginal", 
+  nboot = 2
+)
+
+print(a$R2, n = 100)
+partR2(smfq_all_int, data = smfq_time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
 
 
+# --- Sex interaction model ---
+# Includes sex × timing interactions, controls for generation.
+smfq_sex_int <- glmer(
+  smfq_score ~ cos(Mean.Hour/24*2*pi)*sex + sin(Mean.Hour/24*2*pi)*sex +
+    cos(2*(Mean.Hour/24*2*pi))*sex + sin(2*(Mean.Hour/24*2*pi))*sex + 
+    generation + (1|linker) + (1|Q), 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_sex_int, 
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex"), 
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex"), 
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex")
+  ), 
+  data = smfq_time_data, 
+  olre = FALSE, 
+  R2_type = "marginal", 
+  nboot = 10
+)
+
+print(a$R2)
+partR2(smfq_sex_int, data = smfq_time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
 
 
-#Chapter 5: Social Interactions
+# --- Generation interaction model ---
+# Includes generation × timing interactions, controls for sex.
+smfq_gen_int <- glmer(
+  smfq_score ~ cos(Mean.Hour/24*2*pi)*generation + sin(Mean.Hour/24*2*pi)*generation +
+    cos(2*(Mean.Hour/24*2*pi))*generation + sin(2*(Mean.Hour/24*2*pi))*generation + 
+    sex + (1|linker) + Q, 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_gen_int, 
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):generation"), 
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):generation"), 
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ), 
+  data = smfq_time_data, 
+  olre = FALSE, 
+  R2_type = "marginal", 
+  nboot = 10
+)
+
+print(a$R2)
+partR2(smfq_gen_int, data = smfq_time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
 
 
+# --- No interaction model ---
+# Includes only main effects of timing terms, sex, and generation.
+smfq_noint <- glmer(
+  smfq_score ~ cos(Mean.Hour/24*2*pi) + sin(Mean.Hour/24*2*pi) +
+    cos(2*(Mean.Hour/24*2*pi)) + sin(2*(Mean.Hour/24*2*pi)) + 
+    sex + generation + (1|linker) + Q, 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
 
-#Chapter 6: Emotion Dynamics
+a <- partR2(
+  smfq_noint, 
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ), 
+  data = smfq_time_data, 
+  olre = FALSE, 
+  R2_type = "marginal"
+)
+
+print(a$R2)
+partR2(smfq_noint, data = time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
 
 
+# --- No interaction + no covariates ---
+# Only timing terms (no sex/generation).
+smfq_nocov <- glmer(
+  smfq_score ~ cos(Mean.Hour/24*2*pi) + sin(Mean.Hour/24*2*pi) +
+    cos(2*(Mean.Hour/24*2*pi)) + sin(2*(Mean.Hour/24*2*pi)) + 
+    (1|linker) + Q, 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_nocov, 
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ), 
+  data = smfq_time_data, 
+  olre = FALSE, 
+  R2_type = "marginal"
+)
+
+print(a$R2)
+partR2(smfq_nocov, data = time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
 
 
-#Chapter 7: Mediation 
+# --- Covariates only (no timing terms) ---
+smfq_cov <- glmer(
+  smfq_score ~ sex + generation + (1|linker) + Q, 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_cov, 
+  partvars = c("sex", "generation"), 
+  data = time_data, 
+  olre = FALSE, 
+  R2_type = "marginal"
+)
+
+print(a$R2)
+partR2(smfq_cov, data = time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+
+# --- Null model (random effects only) ---
+smfq_null <- glmer(
+  smfq_score ~ (1|linker) + Q, 
+  data = smfq_time_data, 
+  weights = smfq_time_data$wt, 
+  family = poisson(), 
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+
+# --- Model comparison (ANOVAs) ---
+anova(smfq_all_int, smfq_noint)
+anova(smfq_sex_int, smfq_noint)
+anova(smfq_gen_int, smfq_noint)
+
+anova(smfq_noint, smfq_cov)
+anova(smfq_nocov, smfq_null)
+
+
+# --- Predicted values from best-fitting model ---
+pred_best_model <- ggpredict(
+  smfq_noint, 
+  terms = "Mean.Hour [all]", 
+  type = "fe", 
+  ci.lvl = 0.95
+)
+
+# Plot predicted SMFQ scores vs. average posting hour
+pred_graph <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Average Hour of Tweet Posting", y = "SMFQ Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(0, 26), breaks = seq(0,26, by = 10)) + 
+  theme(axis.text = element_text(size = 15, color = 'black')) + 
+  theme(axis.line = element_line(size = 0.5, colour = "black")) + 
+  theme(axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x  = element_text(size = 15), 
+        axis.text.y  = element_text(size = 15))
+
+# Overlay observed data (scaled by tweet volume)
+pred_graph + 
+  geom_point(data = time_data, aes(x = Mean.Hour, y = smfq_score, size = total_tweets), color = "blue") + 
+  scale_size_area(breaks = c(10, 50, 100, 200,400, 600, 800, 1000, 1500, 3000, 10000))
+
+
+# --- Median hour calculation ---
+# Reads raw tweet datasets, converts hours to radians, and computes
+# participant-level circular medians for each questionnaire wave.
+
+time_c1 <- read.csv("Tweets1.csv")
+time_c2 <- read.csv("Tweets2.csv")
+time_c4 <- read.csv("Tweets4.csv")
+time_c5 <- read.csv("Tweets5.csv")
+time_c6 <- read.csv("Tweets6.csv")
+
+process_time_data <- function(data, Q_value) {
+  data %>%
+    mutate(tweet_angle = tweet_hour / 24 * (2 * pi)) %>%
+    group_by(linker) %>%
+    summarise(
+      median_hour = median.circular(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter")
+      ),
+    ) %>%
+    mutate(
+      median_hour = ifelse(median_hour < 0, median_hour + 2*pi, median_hour), # wrap to [0, 2π]
+      median_hour = (median_hour / (2 * pi)) * 24,                           # back to 24-hour scale
+      Q = Q_value
+    )
+}
+
+# Combine processed datasets
+result_all <- bind_rows(
+  process_time_data(time_c1, Q_value = "1"),
+  process_time_data(time_c2, Q_value = "2"),
+  process_time_data(time_c4, Q_value = "4"),
+  process_time_data(time_c5, Q_value = "5"),
+  process_time_data(time_c6, Q_value = "6")
+)
+
+
+# =====================================================================
+# Chapter 5: Relationship Between Tweeting Frequency and Mental Health
+# =====================================================================
+
+# Objective:
+# Test whether tweeting frequency (log-transformed tweet counts) 
+# predicts mental health outcomes (e.g., SMFQ score), while accounting 
+# for covariates (sex, generation) and repeated measures.
+
+# Prepare data
+freq_data <- test_data[complete.cases(test_data$smfq_score),]
+freq_data$log_tweets <- log(freq_data$total_tweets + 1)  # log-transform
+
+# --- Full model: frequency × sex × generation interactions ---
+smfq_freq_all <- glmer(
+  smfq_score ~ log_tweets*sex*generation + (1|linker) + (1|Q),
+  data = freq_data,
+  weights = freq_data$wt,
+  family = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+# Partition R²: isolate contribution of log_tweets and interactions
+a <- partR2(
+  smfq_freq_all,
+  partbatch = list(
+    tweets = c("log_tweets", "log_tweets:sex", "log_tweets:generation", "log_tweets:sex:generation")
+  ),
+  data = freq_data,
+  olre = FALSE,
+  R2_type = "marginal",
+  nboot = 50
+)
+
+print(a$R2)
+partR2(smfq_freq_all, data = freq_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+
+# --- Simplified model: frequency × sex ---
+smfq_freq_sex <- glmer(
+  smfq_score ~ log_tweets*sex + generation + (1|linker) + (1|Q),
+  data = freq_data,
+  weights = freq_data$wt,
+  family = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_freq_sex,
+  partbatch = list(tweets = c("log_tweets", "log_tweets:sex")),
+  data = freq_data,
+  olre = FALSE,
+  R2_type = "marginal",
+  nboot = 50
+)
+
+print(a$R2)
+partR2(smfq_freq_sex, data = freq_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+
+# --- Simplified model: frequency × generation ---
+smfq_freq_gen <- glmer(
+  smfq_score ~ log_tweets*generation + sex + (1|linker) + (1|Q),
+  data = freq_data,
+  weights = freq_data$wt,
+  family = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_freq_gen,
+  partbatch = list(tweets = c("log_tweets", "log_tweets:generation")),
+  data = freq_data,
+  olre = FALSE,
+  R2_type = "marginal",
+  nboot = 50
+)
+
+print(a$R2)
+partR2(smfq_freq_gen, data = freq_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+
+# --- Main effects model (no interactions) ---
+smfq_freq_main <- glmer(
+  smfq_score ~ log_tweets + sex + generation + (1|linker) + (1|Q),
+  data = freq_data,
+  weights = freq_data$wt,
+  family = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+a <- partR2(
+  smfq_freq_main,
+  partvars = c("log_tweets"),
+  data = freq_data,
+  olre = FALSE,
+  R2_type = "marginal"
+)
+
+print(a$R2)
+partR2(smfq_freq_main, data = freq_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+
+# --- Null model (covariates only, no tweeting frequency) ---
+smfq_freq_cov <- glmer(
+  smfq_score ~ sex + generation + (1|linker) + (1|Q),
+  data = freq_data,
+  weights = freq_data$wt,
+  family = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+
+# --- Model comparison ---
+anova(smfq_freq_all, smfq_freq_main)
+anova(smfq_freq_main, smfq_freq_cov)
+
+
+# --- Predicted values: frequency effect ---
+pred_freq <- ggpredict(
+  smfq_freq_main,
+  terms = "log_tweets [all]",
+  type = "fe",
+  ci.lvl = 0.95
+)
+
+# Plot: SMFQ score vs. log(tweet count)
+ggplot(pred_freq, aes(x, predicted)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(x = "Log(Tweet Count + 1)", y = "SMFQ Score") +
+  theme_minimal(base_size = 15)
+
+
+# =====================================================================
+# Chapter 6: Reply Interaction and Wellbeing
+# =====================================================================
+
+# Objective:
+# Test whether the number of replies received per tweet (mean replies) 
+# predicts wellbeing (e.g., WEMWBS score). Compare models with and 
+# without covariates and interactions.
+
+# Prepare data
+reply_data <- test_data[complete.cases(test_data$wemwbs_score),]
+reply_data$log_replies <- log(reply_data$mean_replies + 1)
+
+
+# --- Full model: reply × sex × generation interactions ---
+wemwbs_replies_all <- lmer(
+  wemwbs_score ~ log_replies*sex*generation + (1|linker) + (1|Q),
+  data = reply_data,
+  weights = reply_data$wt
+)
+
+a <- partR2(
+  wemwbs_replies_all,
+  partbatch = list(replies = c("log_replies", "log_replies:sex", "log_replies:generation", "log_replies:sex:generation")),
+  data = reply_data,
+  R2_type = "marginal",
+  nboot = 50
+)
+
+print(a$R2)
+
+
+# --- Simplified models: replies × sex OR replies × generation ---
+wemwbs_replies_sex <- lmer(
+  wemwbs_score ~ log_replies*sex + generation + (1|linker) + (1|Q),
+  data = reply_data,
+  weights = reply_data$wt
+)
+
+wemwbs_replies_gen <- lmer(
+  wemwbs_score ~ log_replies*generation + sex + (1|linker) + (1|Q),
+  data = reply_data,
+  weights = reply_data$wt
+)
+
+
+# --- Main effects model (no interactions) ---
+wemwbs_replies_main <- lmer(
+  wemwbs_score ~ log_replies + sex + generation + (1|linker) + (1|Q),
+  data = reply_data,
+  weights = reply_data$wt
+)
+
+a <- partR2(
+  wemwbs_replies_main,
+  partvars = "log_replies",
+  data = reply_data,
+  R2_type = "marginal"
+)
+
+print(a$R2)
+
+
+# --- Null model (covariates only) ---
+wemwbs_replies_cov <- lmer(
+  wemwbs_score ~ sex + generation + (1|linker) + (1|Q),
+  data = reply_data,
+  weights = reply_data$wt
+)
+
+
+# --- Model comparison ---
+anova(wemwbs_replies_all, wemwbs_replies_main)
+anova(wemwbs_replies_main, wemwbs_replies_cov)
+
+
+# --- Predicted values: replies effect ---
+pred_replies <- ggpredict(
+  wemwbs_replies_main,
+  terms = "log_replies [all]",
+  type = "fe",
+  ci.lvl = 0.95
+)
+
+ggplot(pred_replies, aes(x, predicted)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(x = "Log(Mean Replies + 1)", y = "WEMWBS Score") +
+  theme_minimal(base_size = 15)
+
+
+# =====================================================================
+# Chapter 7: Mediation Analysis
+# =====================================================================
+
+# Objective:
+# Use SEM (lavaan) to test indirect effects of social media usage 
+# (e.g., tweeting frequency) on mental health outcomes via 
+# mediators (e.g., replies received, timing variables).
+# Multiple imputation (mice + lavaan.mi) used to handle missing data.
+
+# Prepare imputed dataset
+imp <- mice(test_data, m = 20, method = "pmm", seed = 12345)
+
+# Example mediation model:
+# Path: log_tweets → replies → wemwbs
+med_model <- '
+  # Direct effect
+  wemwbs_score ~ c*log_tweets + sex
+
+  # Mediator
+  log_replies ~ a*log_tweets + sex
+  wemwbs_score ~ b*log_replies
+
+  # Indirect effect
+  ab := a*b
+
+  # Total effect
+  total := c + (a*b)
+'
+
+fit <- lavaan.mi(med_model, data = imp, estimator = "MLR")
+
+summary(fit, standardized = TRUE, fit.measures = TRUE, ci = TRUE)
+
