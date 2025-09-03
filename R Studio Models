@@ -22,4 +22,438 @@ library(lavaan.mi)   # SEM with multiple imputation
 # =====================================================================
 # Chapter 3: Covariate Study
 # =====================================================================
+#Code used to perform the circular common distribution test (from Pewsey et al 2022). 
+#Below we provide an example of testing for a common distribution for male and female participants. 
+
+CosSinUniScores <- function(cdat) {
+  N <- length(cdat)
+  ranks <- rank(cdat, ties.method="random")
+  CosUniScores <- cos(ranks*2*pi/N)
+  SinUniScores <- sin(ranks*2*pi/N)
+  return(list(CosUniScores, SinUniScores))
+}
+
+WgVal <- function(CSUScores, ndat, g) {
+  CosUScores <- CSUScores[[1]] ; SinUScores <- CSUScores[[2]]
+  N <- length(CosUScores) ; ndatcsum <- cumsum(ndat)
+  Wg <- 0
+  for (k in 1:g) {
+    CosUScoresk <- 0 ; SinUScoresk <- 0
+    if (k==1) {low <- 0} else
+      if (k > 1) {low <- ndatcsum[k-1]}
+    for (j in 1:ndat[k]) { 
+      CosUScoresk[j] <- CosUScores[j+low] ; SinUScoresk[j] <- SinUScores[j+low] }
+    sumCkSq <- (sum(CosUScoresk))**2 ; sumSkSq <- (sum(SinUScoresk))**2
+    Wg <- Wg+(sumCkSq+sumSkSq)/ndat[k]
+  }
+  Wg <- 2*Wg ; return(Wg)
+}
+
+male <- test_data[test_data$sex == "Male", ]
+female <- test_data[test_data$sex == "Female", ]
+
+m <- circular(male$Mean.Angle)
+f <- circular(female$Mean.Angle)
+
+cdat <- c(m, f) 
+n1 <- length(m) ; n2 <- length(f)
+ndat <- c(n1, n2) ; g <- 2
+CSUScores <- CosSinUniScores(cdat)
+WgObs <- WgVal(CSUScores, ndat, g) ; pchisq(WgObs, 2*(g-1), lower.tail=F)
+
+# =====================================================================
+#Chapter 4: Timing of Tweet Posting
+# =====================================================================
+#Code used to generate the regression models predicting mental health from mean hour. We have provided smfq_score as an example. 
+
+smfq_time_data <- test_data[complete.cases(test_data$smfq_score),]
+
+#SEX AND GENERATION INTERACTION MODELS
+
+smfq_all_int <- glmer(smfq_score ~ cos(Mean.Hour/24*2*pi)*sex + sin(Mean.Hour/24*2*pi)*sex +
+                        cos(2 * (Mean.Hour/24*2*pi))*sex + sin(2 * (Mean.Hour/24*2*pi))*sex + 
+                        cos(Mean.Hour/24*2*pi)*generation + sin(Mean.Hour/24*2*pi)*generation +
+                        cos(2 * (Mean.Hour/24*2*pi))*generation + sin(2 * (Mean.Hour/24*2*pi))*generation
+                        + (1|linker) + (1|Q), 
+                      data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+a<-partR2(smfq_all_int, partbatch = list(cosx = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex", "cos(Mean.Hour/24 * 2 * pi):generation"), 
+                                         sinx = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex", "sin(Mean.Hour/24 * 2 * pi):generation"), 
+                                         cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+                                         sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex"), "sin(2 * (Mean.Hour/24 * 2 * pi)):generation"), 
+          data = smfq_time_data, olre = FALSE, R2_type = "marginal", nboot = 2)
+
+print(a$R2, n = 100)
+partR2(smfq_all_int, data = smfq_time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+#SMFQ SEX INTERACTION MODEL
+
+smfq_sex_int <- glmer(smfq_score ~ cos(Mean.Hour/24*2*pi)*sex + sin(Mean.Hour/24*2*pi)*sex +
+                cos(2 * (Mean.Hour/24*2*pi))*sex + sin(2 * (Mean.Hour/24*2*pi))*sex + 
+                generation + (1|linker) + (1|Q), 
+              data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+a<-partR2(smfq_sex_int, partbatch = list(cosx = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex"), 
+                                         sinx = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex"), 
+                                         cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex"),
+                                         sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex")), 
+          data = smfq_time_data, olre = FALSE, R2_type = "marginal", nboot = 10)
+
+print(a$R2)
+partR2(smfq_sex_int, data = smfq_time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+#SMFQ GEN INTERACTION MODEL
+
+smfq_gen_int <- glmer(smfq_score ~ cos(Mean.Hour/24*2*pi)*generation + sin(Mean.Hour/24*2*pi)*generation +
+                        cos(2 * (Mean.Hour/24*2*pi))*generation + sin(2 * (Mean.Hour/24*2*pi))*generation + 
+                        sex + (1|linker) + Q, 
+                      data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+a<-partR2(smfq_gen_int, partbatch = list(cosx = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):generation"), 
+                                        sinx = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):generation"), 
+                                        cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+                                        sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")), 
+          data = smfq_time_data, olre = FALSE, R2_type = "marginal", nboot = 10)
+
+print(a$R2)
+partR2(smfq_gen_int, data = smfq_time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+#SMFQ NO INTERACTIONS MODEL
+
+smfq_noint <- glmer(smfq_score ~ cos(Mean.Hour/24*2*pi) + sin(Mean.Hour/24*2*pi) +
+                        cos(2 * (Mean.Hour/24*2*pi)) + sin(2 * (Mean.Hour/24*2*pi)) + 
+                      sex + generation + (1|linker) + Q, 
+                      data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+a <- partR2(smfq_noint, partvars = c("cos(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi)",
+                                  "cos(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi))")
+       , data = smfq_time_data, olre = FALSE, R2_type = "marginal")
+
+print(a$R2)
+partR2(smfq_noint, data = time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+#SMFQ NO INTERACTIONS AND NO COVARIATES MODEL
+
+smfq_nocov <- glmer(smfq_score ~ cos(Mean.Hour/24*2*pi) + sin(Mean.Hour/24*2*pi) +
+                      cos(2 * (Mean.Hour/24*2*pi)) + sin(2 * (Mean.Hour/24*2*pi)) + (1|linker) + Q, 
+                    data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+a <- partR2(smfq_nocov, partvars = c("cos(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi)",
+                                "cos(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi))")
+       , data = smfq_time_data, olre = FALSE, R2_type = "marginal")
+
+print(a$R2)
+partR2(smfq_nocov, data = time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+#SMFQ ONLY COVARIATES (NO TIMING TERMS) MODEL
+
+smfq_cov <- glmer(smfq_score ~ sex + generation + (1|linker) + Q, 
+                        data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+a <- partR2(smfq_cov, partvars = c("sex", "generation")
+       , data = time_data, olre = FALSE, R2_type = "marginal")
+
+print(a$R2)
+partR2(smfq_cov, data = time_data, olre = FALSE, max_level = 1, R2_type = "conditional")
+
+#SMFQ NULL MODEL (ONLY RANDOM EFFECTS)
+
+smfq_null <- glmer(smfq_score ~  (1|linker) + Q, 
+                  data = smfq_time_data, weights = smfq_time_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+#SMFQ MODEL ANOVA TESTS
+
+anova(smfq_all_int, smfq_noint)
+anova(smfq_sex_int, smfq_noint)
+anova(smfq_gen_int, smfq_noint)
+
+anova(smfq_noint, smfq_cov)
+anova(smfq_nocov, smfq_null)
+
+#GENERATING GRAPH OF PREDICTED VALUES FOR BEST FITTED SMFQ MODEL
+
+pred_best_model <- ggpredict(smfq_noint, terms = "Mean.Hour [all]", type = "fe", ci.lvl = 0.95)
+
+pred_graph <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Average Hour of Tweet Posting", y = "SMFQ Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(0, 26), breaks = seq(0,26, by = 10))+ 
+  theme(axis.text = element_text(size = 15, color = 'black')) + 
+  theme(axis.line = element_line(size = 0.5, colour = "black"))  + 
+  theme(axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size = 15), 
+        axis.text.y = element_text(size = 15))
+
+pred_graph + geom_point(data = time_data, aes(x = Mean.Hour, y = smfq_score, size = total_tweets), color = "blue") + scale_size_area(breaks = c(10, 50, 100, 200,400, 600, 800, 1000, 1500, 3000, 10000))
+
+#Generating median hour in RStudio. 
+
+# Read all datasets
+time_c1 <- read.csv("Tweets1.csv")
+time_c2 <- read.csv("Tweets2.csv")
+time_c4 <- read.csv("Tweets4.csv")
+time_c5 <- read.csv("Tweets5.csv")
+time_c6 <- read.csv("Tweets6.csv")
+
+# Define a function to process each dataset
+process_time_data <- function(data, Q_value) {
+  data %>%
+    mutate(
+      tweet_angle = tweet_hour / 24 * (2 * pi)  # Convert tweet_hour to radians
+    ) %>%
+    group_by(linker) %>%
+    summarise(
+      median_hour = median.circular(circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter")),
+    ) %>%
+    mutate(
+      # Ensure median_hour is in [0, 2π]
+      median_hour = ifelse(median_hour < 0, median_hour + 2 * pi, median_hour),
+      # Convert to 24-hour clock
+      median_hour = (median_hour / (2 * pi)) * 24,
+      Q = Q_value  # Add a column to indicate the source dataset
+    )
+}
+
+# Process each dataset and combine them into a single dataframe
+result_all <- bind_rows(
+  process_time_data(time_c1, Q_value = "1"),
+  process_time_data(time_c2, Q_value = "2"),
+  process_time_data(time_c4, Q_value = "4"),
+  process_time_data(time_c5, Q_value = "5"),
+  process_time_data(time_c6, Q_value = "6")
+)
+
+
+# =====================================================================
+#Chapter 5: Social Interactions
+# =====================================================================
+
+#Generating baseline mental health variable
+
+# --- Create First COVID Mental Health Scores + Wave Info ---
+all_active <- all_active %>%
+  group_by(linker) %>%
+  mutate(
+    # First COVID MFQ score
+    first_covid_smfq = first(na.omit(c_across(c(
+      COVID1_mfq_cont, COVID2_mfq_cont, COVID4_mfq_cont,
+      COVID5_mfq_cont, COVID6_mfq_cont
+    )))),
+    first_covid_mfq_wave = case_when(
+      !is.na(COVID1_mfq_cont) ~ 1,
+      !is.na(COVID2_mfq_cont) ~ 2,
+      !is.na(COVID4_mfq_cont) ~ 4,
+      !is.na(COVID5_mfq_cont) ~ 5,
+      !is.na(COVID6_mfq_cont) ~ 6,
+      TRUE ~ NA_real_
+    ),
+    
+    # First COVID WEMWBS score
+    first_covid_wemwbs = first(na.omit(c_across(c(
+      COVID1_wemwbs_cont, COVID2_wemwbs_cont, COVID4_wemwbs_cont, COVID6_wemwbs_cont
+    )))),
+    first_covid_wemwbs_wave = case_when(
+      !is.na(COVID1_wemwbs_cont) ~ 1,
+      !is.na(COVID2_wemwbs_cont) ~ 2,
+      !is.na(COVID4_wemwbs_cont) ~ 4,
+      !is.na(COVID6_wemwbs_cont) ~ 6,
+      TRUE ~ NA_real_
+    ),
+    
+    # First COVID GAD score
+    first_covid_gad = first(na.omit(c_across(c(
+      COVID1_gad_cont, COVID2_gad_cont, COVID4_gad_cont,
+      COVID5_gad_cont, COVID6_gad_cont
+    )))),
+    first_covid_gad_wave = case_when(
+      !is.na(COVID1_gad_cont) ~ 1,
+      !is.na(COVID2_gad_cont) ~ 2,
+      !is.na(COVID4_gad_cont) ~ 4,
+      !is.na(COVID5_gad_cont) ~ 5,
+      !is.na(COVID6_gad_cont) ~ 6,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  ungroup()
+
+# --- Models for H1 (Type of Active Use) ---
+# WEMWBS score model
+wem_prop_nt_model <- lmer(
+  wemwbs_score ~ prop_nt + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = wt
+)
+summary(wem_prop_nt_model)
+confint(wem_prop_nt_model, method = "Wald")
+
+# --- Compute between-person means ---
+all_active_filtered <- all_active_filtered %>%
+  group_by(linker) %>%
+  mutate(
+    Like.Count_between = mean(Like.Count, na.rm = TRUE),
+    Rep.Count_between = mean(Reply.Count, na.rm = TRUE),
+    Ret.Count_between = mean(Retweet.Count, na.rm = TRUE),
+    Quo.Count_between = mean(Quote.Count, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Like.Count_within = Like.Count - Like.Count_between,
+    Rep.Count_within = Reply.Count - Rep.Count_between,
+    Ret.Count_within = Retweet.Count - Ret.Count_between,
+    Quo.Count_within = Quote.Count - Quo.Count_between
+  )
+
+likes_gad_model <- lmer(
+  gad_score ~ Like.Count_between + Like.Count_within + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = wt
+)
+summary(likes_gad_model)
+confint(likes_gad_model, method = "Wald")
+
+# --- Models for H3 (Interaction Between Feedback and Active Use) ---
+
+active_nontarget <- all_active |>
+  filter(total_nt > 0)
+
+active_target <- all_active |>
+  filter(total_rep > 0)
+
+like_wem <- lmer(
+  wemwbs_score ~ prop_nt * Like.Count.NT +
+    sex + generation + ed_new + first_covid_wemwbs +
+    (1 | linker) + Q,
+  data = active_nontarget,
+  weights = log1p(total_nt)
+)
+summary(like_wem)
+confint(like_wem, method = "Wald")
+
+like_wem <- lmer(
+  wemwbs_score ~ prop_rep * Like.Count.T +
+    sex + generation + ed_new + first_covid_wemwbs +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(like_wem)
+confint(like_wem, method = "Wald")
+
+wem_pos <- lmer(
+  wemwbs_score ~ prop_rep * Mean.RB.Positive.Score.T +
+    sex + generation + ed_new + first_covid_wemwbs + Q +
+    (1 | linker),
+  data = active_target,
+  weights = wtt
+)
+summary(wem_pos)
+confint(wem_pos, method = "Wald")
+
+wem_pos_nt <- lmer(
+  wemwbs_score ~ prop_rep * Mean.RB.Positive.Score.NT +
+    sex + generation + ed_new + first_covid_wemwbs + Q +
+    (1 | linker),
+  data = active_nontarget,
+  weights = wtnt
+)
+summary(wem_pos_nt)
+confint(wem_pos_nt, method = "Wald")
+
+
+# =====================================================================
+#Chapter 6: Emotion Dynamics
+# =====================================================================
+
+smfq_avp_liwc_pos <- glmer(smfq_score ~ Mean.Posemo.Score + sex + generation + (1|linker) + Q, 
+                           data = sent_data, weights = sent_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+summary(smfq_avp_liwc_pos)
+confint(smfq_avp_liwc_pos, method = "Wald")
+partR2(smfq_avp_liwc_pos, partvars = c("Mean.Posemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+smfq_mssd_neg <- glmer(smfq_score ~ Negemo.MSSD + sex + generation + (1|linker) + Q, 
+                       data = sent_data, weights = sent_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+summary(smfq_mssd_neg)
+confint(smfq_mssd_neg, method = "Wald")
+partR2(smfq_mssd_neg, partvars = c("Negemo.MSSD"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+smfq_std_neg <- glmer(smfq_score ~ Std.Negemo.Score + Mean.Negemo.Score + sex + generation + (1|linker) + Q, 
+                      data = sent_data, weights = sent_data$wt, family = poisson(), glmerControl(optimizer = c("bobyqa")))
+
+summary(smfq_std_neg)
+partR2(smfq_std_neg, partvars = c("Std.Negemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+
+# =====================================================================
+#Chapter 7: Mediation Analysis
+# =====================================================================
+
+#PASSIVE INDEX
+
+# Step 1: Create a named vector of medians for each level
+medians <- c(`1` = 22.5, `2` = 88.5, `3` = 111, `4` = 294, `5` = 1521) 
+
+# Step 2: Map the median to each row based on twitter_freq_num
+med_data$freq_median <- medians[as.character(med_data$twitter_freq_num)]
+med_data$freq_median
+
+# Step 3: Compute passive_index = freq_median - total_tweets
+med_data$passive_index <-  med_data$total_tweets - med_data$freq_median
+hist(med_data$passive_index)
+summary(med_data$passive_index)
+
+med_data %>%
+  group_by(twitter_freq) %>%
+  summarise(
+    mean_passive = mean(passive_index, na.rm = TRUE),
+    median_passive = median(passive_index, na.rm = TRUE),
+    min_passive = min(passive_index),
+    max_passive = max(passive_index),
+    sd = sd(passive_index)
+  )
+
+
+#MULTIPLE IMPUTATION
+
+med <- med_data[, c('passive_index', 'sex', 'generation', 'total_tweets', 'old_total_scaared', 
+                    'sdq_old_ext', 'sdq_ad_ext', 'sdq_old_int', 'sdq_ad_int', 'ad_total_mfq', 'old_total_mfq',
+                    'ad_dawba_anx', 'twitter_freq_num', 'deep_night', 'pat_ses', 'mat_ses', 
+                    'mother_ed', 'partner_ed', 'Mean.RB.Negative', 'wt')]
+
+medimp = mice(med, m = 5, maxit = 10, printFlag = FALSE, seed = 456)
+medimpdata <- complete(medimp, 1)
+head(medimpdata)
+
+#MODELS
+
+model_mfq_pi <- '
+  passive_index ~ a*ad_total_mfq + sex + mother_ed + partner_ed + mat_ses + pat_ses
+  old_total_mfq ~ cPrime*ad_total_mfq + b*passive_index + sex + mother_ed + partner_ed + mat_ses + pat_ses
+  ab := a*b
+  c := cPrime + ab
+'
+fit <- cfa.mi(model_mfq_pi, data = medimp, se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_mfq_dn <- '
+  deep_night ~ a*ad_total_mfq + sex + mother_ed + partner_ed + mat_ses + pat_ses
+  old_total_mfq ~ cPrime*ad_total_mfq + b*deep_night + sex + mother_ed + partner_ed + mat_ses + pat_ses
+  ab := a*b
+  c := cPrime + ab
+'
+fit <- cfa.mi(model_mfq_dn, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_mfq_rb <- '
+  Mean.RB.Negative ~ a*ad_total_mfq + sex + mother_ed + partner_ed + mat_ses + pat_ses
+  old_total_mfq ~ cPrime*ad_total_mfq + b*Mean.RB.Negative + sex + mother_ed + partner_ed + mat_ses + pat_ses
+  ab := a*b
+  c := cPrime + ab
+'
+fit <- cfa.mi(model_mfq_rb, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+
 
