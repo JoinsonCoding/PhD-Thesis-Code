@@ -1,140 +1,114 @@
-#The following function was used to generate circular mean in Python. 
-#It can be applied to a participant-level dataset, where there are columns measuring the number of Tweets posted at each hour.
-#Within my thesis, it was enclosed within the final_generation function (for data linkage), as shown below. 
+# -------------------------------------------------
+# Circular Mean Calculation for Tweet Times
+# -------------------------------------------------
+# This function computes the circular (angular) mean of Tweet posting times for each participant.
+# Intended for use with participant-level datasets where columns 0-23 represent Tweet counts for each hour.
+#
+# Application:
+# - Designed to be called within the final_generation linkage function.
+# - Generates participant-wise summary metrics for temporal Tweet behaviour.
+# -------------------------------------------------
 
-"""
-This function generates a circular mean for each participant
-1). Data is provided in wide form, with columns referring to the number of Tweets each participant posted in each 1-hour time
-window. 
-2). A list is generated, comprised of the angle of posting for every Tweet of a single participant. E.g. a participant with 
-three Tweets at 24.00 will have a list of 0,0,0. 
-3). These angles are then used to generate a mean angle of Tweet posting. Other relevant circular metrics are generated.
-4). Each row of the provided dataset is looped through, thus generating a list of mean angles. 
-"""
-
+import math
+import pandas as pd
+import numpy as np
 
 def circ_mean_round(data_f, mean_ang):
+    """
+    Computes circular mean Tweet posting time for each participant.
 
+    Workflow:
+    1. For each participant (row in data_f), expand hourly Tweet counts (columns 0-23) into a list of hour angles.
+    2. Convert hour to radians: angle = (hour/24) * 2π.
+    3. Concatenate all hour angles for all Tweets by the participant.
+    4. Compute mean resultant vector (C, S), then derive circular mean angle.
+    5. Accounts for edge cases (no Tweets, zero vectors).
+    6. Appends mean angle value to mean_ang list.
+
+    Parameters:
+    - data_f: DataFrame, participant-level wide form with hourly Tweet columns.
+    - mean_ang: list, collects mean angle value per participant (order matches data_f rows).
+
+    Returns: None (results added to mean_ang list).
+    """
     for ind in data_f['row_num']:
-        x0 = [(0/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][0]))]
-        x1 = [(1/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][1]))]
-        x2 = [(2/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][2]))]
-        x3 = [(3/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][3]))]
-        x4 = [(4/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][4]))]
-        x5 = [(5/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][5]))]
-        x6 = [(6/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][6]))]
-        x7 = [(7/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][7]))]
-        x8 = [(8/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][8]))]
-        x9 = [(9/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][9]))]
-        x10 = [(10/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][10]))]
-        x11 = [(11/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][11]))]
-        x12 = [(12/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][12]))]
-        x13 = [(13/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][13]))]
-        x14 = [(14/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][14]))]
-        x15 = [(15/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][15]))]
-        x16 = [(16/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][16]))]
-        x17 = [(17/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][17]))]
-        x18 = [(18/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][18]))]
-        x19 = [(19/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][19]))]
-        x20 = [(20/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][20]))]
-        x21 = [(21/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][21]))]
-        x22 = [(22/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][22]))]
-        x23 = [(23/24) * (2*math.pi) for i in range(int(final_df.iloc[ind][23]))]
-
-        x0.extend(x1)
-        x0.extend(x2)
-        x0.extend(x3)
-        x0.extend(x4)
-        x0.extend(x5)
-        x0.extend(x6)
-        x0.extend(x7)
-        x0.extend(x8)
-        x0.extend(x9)
-        x0.extend(x10)
-        x0.extend(x11)
-        x0.extend(x12)
-        x0.extend(x13)
-        x0.extend(x14)
-        x0.extend(x15)
-        x0.extend(x16)
-        x0.extend(x17)
-        x0.extend(x18)
-        x0.extend(x19)
-        x0.extend(x20)
-        x0.extend(x21)
-        x0.extend(x22)
-        x0.extend(x23)
-
-        angles = x0
-
-        mean_data = pd.DataFrame(angles, columns = ['angles_r'])
-
+        # Build list of angles for all Tweets by participant, hour-by-hour
+        x_all = []
+        for hour in range(24):
+            angle = (hour / 24) * (2 * math.pi)
+            x_all.extend([angle] * int(data_f.iloc[ind][hour]))
+        angles = x_all
+        
+        # Calculate mean cosine (C) and sine (S) of angles
+        mean_data = pd.DataFrame(angles, columns=['angles_r'])
         mean_data['C'] = np.cos(mean_data['angles_r'])
         mean_data['S'] = np.sin(mean_data['angles_r'])
+        
         if len(mean_data) != 0:
-            C = (1 / len(mean_data)) * round(mean_data['C'].sum(), 10)
-            S = (1 / len(mean_data)) * round(mean_data['S'].sum(), 10)
-
+            C = mean_data['C'].sum() / len(mean_data)
+            S = mean_data['S'].sum() / len(mean_data)
+            # Determine circular mean angle based on quadrant
             if S >= 0 and C > 0:
-                mean_angle = np.arctan(S/C)
+                mean_angle = np.arctan(S / C)
             elif C < 0:
-                mean_angle = np.arctan(S/C) + math.pi
+                mean_angle = np.arctan(S / C) + math.pi
             elif S < 0 and C > 0:
-                mean_angle = np.arctan(S/C) + 2 * math.pi
+                mean_angle = np.arctan(S / C) + 2 * math.pi
             elif S > 0 and C == 0:
-                mean_angle = 1/2 * math.pi
+                mean_angle = 0.5 * math.pi
             elif S < 0 and C == 0:
-                mean_angle = 3/2 * math.pi
+                mean_angle = 1.5 * math.pi
             elif S == 0 and C == 0:
                 mean_angle = None
-
-            mean_ang.append(mean_angle) 
-
-        else:
-            mean_angle = None
             mean_ang.append(mean_angle)
+        else:
+            mean_ang.append(None)
 
-#This function uses the functions above to generate a participant-level dataset
+# -------------------------------------------------
+# Integration with Data Linkage and Saving Procedure
+# -------------------------------------------------
 
 def final_generation(df, name):
-    
+    """
+    Runs participant-level metric generation, including circular mean, for Tweet time window analysis.
+
+    Steps:
+    - Generates hourly Tweet count columns and total Tweet counts ('total_tweets').
+    - Adds row tracking variable ('row_num').
+    - Runs circular mean calculation per participant (via circ_mean_round).
+    - Adds mean angle as new column to dataframe.
+    - Merges enriched Tweet metrics with ALSPAC survey data and generates participant/generation labels.
+    - Saves final merged dataset to disk.
+    """
     data_gen(df, 'final_df')
     global final_df
-    final_df = final_df[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
-
-    # Generating total tweets variables
-    final_df['total_tweets'] = final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6] + final_df[7] + final_df[8] + + final_df[9] + + final_df[10] + final_df[11]+ final_df[12]+ final_df[13]+ final_df[14]+ final_df[15]+ final_df[16]+ final_df[17]+ final_df[18]+ final_df[19]+ final_df[20]+ final_df[21] + final_df[22] + final_df[23]  
-
-    #Generating row_num column, referring the row number of each of the dataframe's row
-    final_df['row_num'] = np.arange(len(final_df))
-    final_df['row_num']
-    #print(final_df)
-    #print(final_df.iloc[0][0])
+    # Keep linker and Tweet counts for hours 0-23
+    final_df = final_df[['linker'] + list(range(24))]
     
-    #Circular Mean Generation
-
+    # Calculate total Tweets per participant
+    final_df['total_tweets'] = final_df.loc[:, range(24)].sum(axis=1)
+    
+    # Row number for reference
+    final_df['row_num'] = np.arange(len(final_df))
+    
+    # ---- Circular Mean Calculation ----
     mean_ang = []
     circ_mean_round(final_df, mean_ang)
-
-    #A new column is added referring to the mean angle for each participant. 
-
-    final_df['Mean Angle'] = mean_ang
-    final_df
-
-    #Merging participant level Twitter dataset to ALSPAC survey dataset
-
+    final_df['Mean Angle'] = mean_ang    # New column for mean posting angle
+    
+    # Prepare linkage and saving
     link = final_df[['linker','Mean Angle', 'total_tweets']]
     final_d = surv.merge(final_df)
     final_d = final_d.sort_values(by=['row_num'])
     
+    # Compose participant linkage labels
     final_d['aln'] = final_d['aln'].astype(str)
     final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
     
+    # Assign generation classification
     final_d['generation'] = None
-    final_d.loc[(final_d['qlet'] == 'A') | (final_d['qlet'] == 'B'), 'generation'] = 'G1'
-    final_d.loc[(final_d['qlet'] == 'P') | (final_d['qlet'] == 'M'), 'generation'] = 'G0'
-
+    final_d.loc[final_d['qlet'].isin(['A', 'B']), 'generation'] = 'G1'
+    final_d.loc[final_d['qlet'].isin(['P', 'M']), 'generation'] = 'G0'
+    
     print(final_d)
-
-    final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
-
+    final_d.to_csv(f'C:/Users/ta20395/TD/Second Harvest Data/{name}.csv')
