@@ -1,138 +1,184 @@
-#This code shows how our data linkage process (i.e. final_generation) was adapted to provide the relevant emotion dynamics metrics in Chapter 6. 
-#As an example, we have shown how these metrics are generated for LIWC PosEmo
+# ------------------------------------------------
+# Emotion Dynamics Metrics: LIWC PosEmo Example
+# ------------------------------------------------
+# This script demonstrates how to link survey and Tweet data to calculate emotion metrics
+# (Chapter 6 application). The metrics shown focus on LIWC Positive Emotion scores.
+
+import pandas as pd
+import numpy as np
+
+# -----------------------------------------------
+# Hourly Tweet Frequency Extraction
+# -----------------------------------------------
 
 def time_dataframe(data_f, id):
+    """
+    Returns per-hour Tweet counts for a participant.
+    - Filters to rows matching participant id ('linker').
+    - Builds dictionary: {hour: Tweet count}.
+    - Fills missing hours with 0s.
+    - Returns row-wise DataFrame for participant.
+    """
     if id in data_f['linker'].unique():
-        is_id = data_f['linker'] == id
-        df_filter = data_f[is_id] # Filters dataset by row
-
-        time_counts = df_filter.tweet_hour.value_counts() # Generates count of each time window
-
+        df_filter = data_f[data_f['linker'] == id]
+        time_counts = df_filter.tweet_hour.value_counts()
         keys = np.array(time_counts.index)
         value = np.array(time_counts.values)
-        diction = {keys[i]: value[i] for i in range(len(keys))} # Generates dictionary from time window data
-
-        missing_times(diction, keys) # If dictionary key is missing (i.e. no Tweets during this time), add key with value 0
-
-        df_times = pd.DataFrame.from_dict(diction, orient='index')
-        df_times = df_times.transpose() # Create dataframe from this dictionary
-
-        df_times['linker'] = id # Add ID column to dataframe
+        diction = {keys[i]: value[i] for i in range(len(keys))}
+        missing_times(diction, keys)
+        df_times = pd.DataFrame.from_dict(diction, orient='index').transpose()
+        df_times['linker'] = id
         return df_times
-    
+
 def missing_times(dic, keys):
-    for n in range(0,24):
+    """
+    Ensures all 24 hours (0-23) are present as keys in the output dictionary. Fills missing with 0.
+    """
+    for n in range(24):
         if n not in keys:
-            dic.update({n: 0})
+            dic[n] = 0
     return dic
 
-id_list = np.array(td['linker'].unique())
+# -----------------------------------------------
+# Create Participant-Level Tweet Metrics
+# -----------------------------------------------
 
 def data_gen(data_f, out_name):
+    """
+    Constructs wide-form DataFrame of hourly Tweet counts for all participants.
+    - Iterates through unique participant IDs (column 'linker').
+    - Calls time_dataframe for each, collects into list.
+    - Concatenates all into one big DataFrame with one row per participant.
+    - Assigns output to a global variable for further use.
+    """
     id_list = np.array(data_f['linker'].unique())
     frames = []
-    
     for item in id_list:
         dt = time_dataframe(data_f, item)
         frames.append(dt)
-
     result = pd.concat(frames)
+    globals()[out_name] = result
+    return out_name
 
-    var_name = out_name
-
-    str = var_name
-
-    globals()[str] = result
-
-    return var_name
+# -----------------------------------------------
+# Data Linkage and LIWC PosEmo Metric Generation
+# -----------------------------------------------
 
 def final_generation(df, name):
-    
+    """
+    Merges participant-level Tweet metrics with ALSPAC survey data, computes emotion metrics.
+
+    Workflow:
+    - Generates hourly Tweet counts ('final_df'), and total Tweets per participant.
+    - Adds participant row index ('row_num').
+    - Links Twitter metrics to survey data.
+    - Calculates emotion summary measures (LIWC PosEmo mean and SD), merges to linked data.
+    - Creates participant/generation label variables and saves CSV output.
+    """
     data_gen(df, 'final_df')
     global final_df
-    final_df = final_df[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
-    # Generating total tweets variables
-    final_df['total_tweets'] = final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6] + final_df[7] + final_df[8] + + final_df[9] + + final_df[10] + final_df[11]+ final_df[12]+ final_df[13]+ final_df[14]+ final_df[15]+ final_df[16]+ final_df[17]+ final_df[18]+ final_df[19]+ final_df[20]+ final_df[21] + final_df[22] + final_df[23]  
-
-    #Generating row_num column, referring the row number of each of the dataframe's row
+    final_df = final_df[['linker'] + list(range(24))]
+    final_df['total_tweets'] = final_df.loc[:, range(24)].sum(axis=1)
     final_df['row_num'] = np.arange(len(final_df))
-    final_df['row_num']
-    
-    #Merging participant level Twitter dataset to ALSPAC survey dataset
 
+    # Merge with ALSPAC survey data
     link = final_df[['linker', 'total_tweets']]
     final_d = surv.merge(final_df)
-    final_d = final_d.sort_values(by=['row_num'])
+    final_d = final_d.sort_values(by='row_num')
     
+    # --- LIWC PosEmo Metrics ---
+    # Fill missing values for LIWC Positive Emotion scores
     df['epicosmliwcposemo'] = df['epicosmliwcposemo'].fillna(0)
+
+    # Participant-level mean LIWC PosEmo
     pos_df = df.groupby('linker')['epicosmliwcposemo'].mean().reset_index()
-    pos_df.rename(columns = {'epicosmliwcposemo': 'Mean Posemo Score'}, inplace=True)
+    pos_df.rename(columns={'epicosmliwcposemo': 'Mean Posemo Score'}, inplace=True)
     final_d = pd.merge(final_d, pos_df)
-    
+
+    # Participant-level standard deviation of LIWC PosEmo
     poss_df = df.groupby('linker')['epicosmliwcposemo'].std().reset_index()
-    poss_df.rename(columns = {'epicosmliwcposemo': 'Std Posemo Score'}, inplace=True)
+    poss_df.rename(columns={'epicosmliwcposemo': 'Std Posemo Score'}, inplace=True)
     final_d = pd.merge(final_d, poss_df)
 
+    # Construct participant labels and generation codes
     final_d['aln'] = final_d['aln'].astype(str)
     final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
-    
     final_d['generation'] = None
-    final_d.loc[(final_d['qlet'] == 'A') | (final_d['qlet'] == 'B'), 'generation'] = 'G1'
-    final_d.loc[(final_d['qlet'] == 'P') | (final_d['qlet'] == 'M'), 'generation'] = 'G0'
-
+    final_d.loc[final_d['qlet'].isin(['A', 'B']), 'generation'] = 'G1'
+    final_d.loc[final_d['qlet'].isin(['P', 'M']), 'generation'] = 'G0'
+    
     print(final_d)
-
-    final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
+    final_d.to_csv(f'C:/Users/ta20395/TD/Second Harvest Data/{name}.csv')
 
 final_generation(tl_df, 'final_df')
 
-#Prior to running the MSSD code below, you must generate a variable for the date each Tweet was posted at.
-#This should be in the format 2019-12-04 17:00:00. 
+# -----------------------------------------------
+# MSSD Emotion Dynamics Calculation
+# -----------------------------------------------
+
+# Please note: 'date' column for Tweets must be properly formatted (e.g. YYYY-MM-DD HH:MM:SS).
 
 no_gap = []
+
 def calculate_mssd(df, sentiment):
-    
-    # Sort the DataFrame by date Tweet posted
+    """
+    Computes Mean Squared Successive Difference (MSSD), adjusted for time gaps.
+
+    Steps:
+    - Sorts Tweet data by date and averages sentiment for duplicate times.
+    - Calculates time differences (in hours) between consecutive Tweets.
+    - Computes squared differences in successive sentiment scores, divided by time-gap.
+    - Aggregates to final MSSD value, adjusted by median gap.
+
+    Returns: time-adjusted MSSD value for the participant.
+    """
     df = df.sort_values(by='date')
-    
     df = df.groupby('date', as_index=False)[sentiment].mean()
 
-    # Calculate the time differences between consecutive rows
     df['time_diff'] = df['date'].diff()
-
-    # Convert this to a float value - e.g. a differences of 10 days and 12 hours is a float value of 10.5
     df['time_diff_float'] = df['time_diff'].dt.days * 24 + df['time_diff'].dt.seconds / 3600
     gap = len(df.loc[df['time_diff_float'] == 0.0])
     no_gap.append(gap)
 
-    # Calculate the squared differences between consecutive sentiments
-    df['consecutive_sentiments_diff'] = ((df[sentiment] - df[sentiment].shift(1))**2) / df['time_diff_float']
-
-    # Calculate the time-adjusted MSSD measure
+    # Compute squared successive differences, adjusted for time gap
+    df['consecutive_sentiments_diff'] = ((df[sentiment] - df[sentiment].shift(1)) ** 2) / df['time_diff_float']
     median_time_diff = df['time_diff_float'].median()
     mssd_time_adjusted = df['consecutive_sentiments_diff'].sum() * (median_time_diff / (len(df) - 1))
     return mssd_time_adjusted
 
 def apply_mssd(var, col_name, list_sent, data):
+    """
+    Computes participant-level MSSD values, appends to result list.
+
+    For each participant ('linker'):
+    - Extract their Tweet rows from full dataset.
+    - Calculate their sentiment MSSD score.
+    - Store result and id as dictionary in output list.
+    """
     for participant_id in data['linker'].unique():
         participant_data = data[data['linker'] == participant_id]
         mssd = calculate_mssd(participant_data, var)
         list_sent.append({'linker': participant_id, col_name: mssd})
 
 def mssd_to_df(data, Q):
-    # Identify rows where 'Column2' appears more than once
+    """
+    Produces a DataFrame of participant-level MSSD scores for LIWC PosEmo.
+
+    - Keeps only participants with duplicate 'linker' entries (suggesting sufficient data).
+    - Runs MSSD calculation, stores score in output DataFrame.
+    - Appends questionnaire label Q for context.
+    """
     duplicates_mask = data.duplicated(subset='linker', keep=False)
-    # Keep only rows where 'Column2' appears more than once
     data = data[duplicates_mask]
     if len(data) < 0:
         print("No valid Tweets")
     else:
         mssd_scores_posemo = []
         apply_mssd('epicosmliwcposemo', 'Posemo MSSD', mssd_scores_posemo, data)
-        df = pd.DataFrame(mssd_scores_posemo)
-        df['Q'] = Q
-        return df
+        df_mssd = pd.DataFrame(mssd_scores_posemo)
+        df_mssd['Q'] = Q
+        return df_mssd
 
+# Generate and merge participant emotion dynamics metric (Posemo MSSD) into analysis DataFrame
 mssd = mssd_to_df(tl_df, '1')
-
 pd.merge(final_df, mssd)
