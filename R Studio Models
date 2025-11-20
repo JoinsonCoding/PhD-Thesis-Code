@@ -5,11 +5,6 @@
 library(lme4)        # Mixed effects regression
 library(ggplot2)     # Plotting
 library(ggeffects)   # Predicted values from regression models
-library(tibble)      # Data manipulation
-library(kableExtra)  # Tables
-library(MuMIn)       # Model selection
-library(blmeco)      # Additional mixed-model tools
-library(sensemakr)   # Sensitivity analysis
 library(partR2)      # Partitioned R² for GLMMs
 library(circular)    # Circular statistics
 library(dplyr)       # Data manipulation
@@ -18,6 +13,16 @@ library(mice)        # Multiple imputation
 library(lavaan)      # SEM
 library(lavaan.mi)   # SEM with multiple imputation
 
+# =====================================================================
+# Data
+# =====================================================================
+
+#The analyses detailed below use a variety of subsamples of the participants and Twitter data. 
+#Cov_data uses all participants who posted at least one Tweets between 2012 and 2023
+#Time_data uses all participnat who posted at least one Tweet before they completed one of the COVID1,2,4,5 or 6 questionnaires
+#Active_data is the same as time_data, but excludes all Tweets which had their text removed (e.g. as the Tweet was removed by Twitter)
+#Sent_data uses all participants who posted at least 10 Tweets before they completed the COVID1 and/or the COVID6 questionnaire, but excluding Retweets and Tweets with removed text. 
+#Med_data uses all participants who posted at least one Tweet between 2010 and 2016. 
 
 # =====================================================================
 # Chapter 3: Covariate Study
@@ -60,6 +65,11 @@ n1 <- length(m) ; n2 <- length(f)
 ndat <- c(n1, n2) ; g <- 2
 CSUScores <- CosSinUniScores(cdat)
 WgObs <- WgVal(CSUScores, ndat, g) ; pchisq(WgObs, 2*(g-1), lower.tail=F)
+
+# I used the functions shapiro.test and wilcox.test to perform the other statistical test in this chapter. 
+# For example, the Wilcox test comparing total Tweets posted to sex using the code:
+
+wilcox.test(total_tweets ~ sex, data = test_data)
 
 # =====================================================================
 #Chapter 4: Timing of Tweet Posting
