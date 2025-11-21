@@ -1,1 +1,415 @@
+# =====================================================================
+# Required packages
+# =====================================================================
+# Load all R packages required for the analyses in Chapters 3–7
+library(lme4)        # Mixed effects regression
+library(ggplot2)     # Plotting
+library(ggeffects)   # Predicted values from regression models
+library(dplyr)       # Data manipulation
+library(tidyverse)   # Core tidyverse functions
+
+# =====================================================================
+# Data
+# =====================================================================
+
+#This is a wide-form dataset contaning all participants who posted at least one
+#Tweet in the 2-weeks before they completed a COVID1,2,4,5 or 6 questionnaire.
+#This excludes all Tweets removed by the platform. 
+
+all_active <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_active.csv")
+
+# =====================================================================
+# Formatting Data
+# =====================================================================
+
+all_active$linker <- as.factor(all_active$linker) #Participant ID
+all_active$Q <- as.factor(all_active$Q) #Questionnaire 
+
+all_active$sex[all_active$sex== "Male"] <- (-1)
+all_active$sex[all_active$sex == "Female"] <- 1
+all_active$sex <- as.factor(all_active$sex)
+
+all_active$generation[(all_active$qlet == "G1")] <- 1
+all_active$generation[(all_active$qlet == "G0")] <- (-1)
+all_active$generation <- as.factor(all_active$generation)
+
+all_active$ed_new[all_active$ed_new== "Below degree"] <- (-1)
+all_active$ed_new[all_active$ed_new == "Degree and above"] <- (1)
+all_active$ed_new[all_active$ed_new == ""] <- NA
+all_active$ed_new <- as.factor(all_active$ed_new)
+table(all_active$ed_new)
+
+all_active$tweets_wt <- log1p(all_active$total_tweets) #Weight Variable
+
+all_active$smfq_score <- log1p(all_active$smfq_score) #Transforming skewed mental health variables
+all_active$gad_score <- log1p(all_active$gad_score)
+
+
+
+# =====================================================================
+# Generating Baseline Mental Health Score
+# =====================================================================
+
+
+# --- Create First COVID Mental Health Scores + Wave Info ---
+all_active <- all_active %>%
+  group_by(linker) %>%
+  mutate(
+    # First COVID MFQ score
+    first_covid_smfq = first(na.omit(c_across(c(
+      COVID1_mfq_cont, COVID2_mfq_cont, COVID4_mfq_cont,
+      COVID5_mfq_cont, COVID6_mfq_cont
+    )))),
+    first_covid_mfq_wave = case_when(
+      !is.na(COVID1_mfq_cont) ~ 1,
+      !is.na(COVID2_mfq_cont) ~ 2,
+      !is.na(COVID4_mfq_cont) ~ 4,
+      !is.na(COVID5_mfq_cont) ~ 5,
+      !is.na(COVID6_mfq_cont) ~ 6,
+      TRUE ~ NA_real_
+    ),
+    
+    # First COVID WEMWBS score
+    first_covid_wemwbs = first(na.omit(c_across(c(
+      COVID1_wemwbs_cont, COVID2_wemwbs_cont, COVID4_wemwbs_cont, COVID6_wemwbs_cont
+    )))),
+    first_covid_wemwbs_wave = case_when(
+      !is.na(COVID1_wemwbs_cont) ~ 1,
+      !is.na(COVID2_wemwbs_cont) ~ 2,
+      !is.na(COVID4_wemwbs_cont) ~ 4,
+      !is.na(COVID6_wemwbs_cont) ~ 6,
+      TRUE ~ NA_real_
+    ),
+    
+    # First COVID GAD score
+    first_covid_gad = first(na.omit(c_across(c(
+      COVID1_gad_cont, COVID2_gad_cont, COVID4_gad_cont,
+      COVID5_gad_cont, COVID6_gad_cont
+    )))),
+    first_covid_gad_wave = case_when(
+      !is.na(COVID1_gad_cont) ~ 1,
+      !is.na(COVID2_gad_cont) ~ 2,
+      !is.na(COVID4_gad_cont) ~ 4,
+      !is.na(COVID5_gad_cont) ~ 5,
+      !is.na(COVID6_gad_cont) ~ 6,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  ungroup()
+
+
+
+# =====================================================================
+# Models for H1 (Type of Active Use Performed)
+# =====================================================================
+
+wem_prop_nt_model <- lmer(
+  wemwbs_score ~ prop_nt + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(wem_prop_nt_model)
+
+wem_prop_rt_model <- lmer(
+  wemwbs_score ~ prop_rt + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(wem_prop_rt_model)
+
+wem_prop_rep_model <- lmer(
+  wemwbs_score ~ prop_rep + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(wem_prop_rep_model)
+
+
+
+smfq_prop_nt_model <- lmer(
+  smfq_score ~ prop_nt + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+summary(smfq_prop_nt_model)
+
+smfq_prop_rt_model <- lmer(
+  smfq_score ~ prop_rt + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+
+summary(smfq_prop_rt_model)
+
+smfq_prop_rep_model <- lmer(
+  smfq_score ~ prop_rep + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+
+summary(smfq_prop_rep_model)
+
+
+
+
+gad_prop_nt_model <- lmer(
+  gad_score ~ prop_nt + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+
+summary(gad_prop_nt_model)
+
+gad_prop_rt_model <- lmer(
+  gad_score ~ prop_rt + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+
+summary(gad_prop_rt_model)
+
+gad_prop_rep_model <- lmer(
+  gad_score ~ prop_rep + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+
+summary(gad_prop_rep_model)
+
+
+
+
+
+# =====================================================================
+# Models for H2-3 (Feedback Received)
+# =====================================================================
+
+#Analysis restricted to those with more than 1 timepoint
+all_active_multiwave <- all_active %>%
+  group_by(linker) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+all_active_multiwave <- all_active_multiwave %>%
+  group_by(linker) %>%
+  mutate(
+    Like.Count_between = mean(Like.Count, na.rm = TRUE),
+    Rep.Count_between = mean(Reply.Count, na.rm = TRUE),
+    Ret.Count_between = mean(Retweet.Count, na.rm = TRUE),
+    Quo.Count_between = mean(Quote.Count, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Like.Count_within = Like.Count - Like.Count_between,
+    Rep.Count_within = Reply.Count - Rep.Count_between,
+    Ret.Count_within = Retweet.Count - Ret.Count_between,
+    Quo.Count_within = Quote.Count - Quo.Count_between
+  )
+
+
+likes_wem_model <- lmer(
+  wemwbs_score ~ Like.Count_between + Like.Count_within + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active_multiwave,
+  weights = tweets_wt
+)
+summary(likes_wem_model)
+
+reply_wem_model <- lmer(
+  wemwbs_score ~ Rep.Count_between + Rep.Count_within + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(reply_wem_model)
+
+ret_wem_model <- lmer(
+  wemwbs_score ~ Ret.Count_between + Ret.Count_within + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(ret_wem_model)
+
+quo_wem_model <- lmer(
+  wemwbs_score ~ Quo.Count_between + Quo.Count_within + sex + generation + ed_new + first_covid_wemwbs + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(ret_wem_model)
+
+
+
+likes_smfq_model <- lmer(
+  smfq_score ~ Like.Count_between + Like.Count_within + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt)
+summary(likes_smfq_model)
+
+rep_smfq_model <- lmer(
+  smfq_score ~ Rep.Count_between + Rep.Count_within + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt, family = poisson()
+)
+summary(rep_smfq_model)
+
+ret_smfq_model <- lmer(
+  smfq_score ~ Ret.Count_between + Ret.Count_within + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(ret_smfq_model)
+
+quo_smfq_model <- lmer(
+  smfq_score ~ Quo.Count_between + Quo.Count_within + sex + generation + ed_new + first_covid_smfq + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(quo_smfq_model)
+
+
+
+likes_gad_model <- lmer(
+  gad_score ~ Like.Count_between + Like.Count_within + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(likes_gad_model)
+
+rep_gad_model <- lmer(
+  gad_score ~ Rep.Count_between + Rep.Count_within + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(rep_gad_model)
+
+ret_gad_model <- lmer(
+  gad_score ~ Ret.Count_between + Ret.Count_within + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(ret_gad_model)
+
+
+quo_gad_model <- lmer(
+  gad_score ~ Quo.Count_between + Quo.Count_within + sex + generation + ed_new + first_covid_gad + Q + (1 | linker),
+  data = all_active,
+  weights = tweets_wt
+)
+summary(quo_gad_model)
+
+
+
+# =====================================================================
+# Models for H4 (Moderation by Feedback Received)
+# =====================================================================
+
+active_target <- all_active |>
+  filter(total_rep > 0)
+
+#Feedback.T (e.g. Like.Count.T) is total feedback received on just targeted Tweets
+
+
+like_wem <- lmer(
+  wemwbs_score ~ prop_rep * Like.Count.T +
+    sex + generation + ed_new + first_covid_wemwbs +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(like_wem)
+
+rt_wem <- lmer(
+  wemwbs_score ~ prop_rep * Retweet.Count.T +
+    sex + generation + ed_new + first_covid_wemwbs +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(rt_wem)
+
+reply_wem <- lmer(
+  wemwbs_score ~ prop_rep * Reply.Count.T +
+    sex + generation + ed_new + first_covid_wemwbs +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(reply_wem)
+
+quote_wem <- lmer(
+  wemwbs_score ~ prop_rep * Quote.Count.T +
+    sex + generation + ed_new + first_covid_wemwbs +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(quote_wem)
+
+
+like_gad <- lmer(
+  gad_score ~ prop_rep * Like.Count.T +
+    sex + generation + ed_new + first_covid_gad +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(like_gad)
+
+rt_gad <- lmer(
+  gad_score ~ prop_rep * Retweet.Count.T +
+    sex + generation + ed_new + first_covid_gad +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(rt_gad)
+
+reply_gad <- lmer(
+  gad_score ~ prop_rep * Reply.Count.T +
+    sex + generation + ed_new + first_covid_gad +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(reply_gad)
+
+quote_gad <- lmer(
+  gad_score ~ prop_rep * Quote.Count.T +
+    sex + generation + ed_new + first_covid_gad +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(quote_gad)
+
+
+like_smfq <- lmer(
+  smfq_score ~ prop_rep * Like.Count.T +
+    sex + generation + ed_new + first_covid_smfq +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(like_smfq)
+
+rt_smfq <- lmer(
+  smfq_score ~ prop_rep * Retweet.Count.T +
+    sex + generation + ed_new + first_covid_smfq +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(rt_smfq)
+
+reply_smfq <- lmer(
+  smfq_score ~ prop_rep * Reply.Count.T +
+    sex + generation + ed_new + first_covid_smfq +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(reply_smfq)
+
+quote_smfq <- lmer(
+  smfq_score ~ prop_rep * Quote.Count.T +
+    sex + generation + ed_new + first_covid_smfq +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(quote_smfq)
+
+
 
