@@ -1,1 +1,1807 @@
+############################################################
+# INSTALLING PACKAGES
+############################################################
 
+library(lme4)         
+library(ggplot2)
+library(ggeffects)    
+library(circular)     
+library(dplyr)        
+library(partR2)       
+
+
+############################################################
+# READING AND PREPARING DATA
+############################################################
+
+# Read the main dataset containing tweet timing and mental health scores
+time_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_cs.csv")
+
+# Recoding sex: Male = -1, Female = 1, then convert to factor
+time_data$sex[time_data$sex == "Male"]   <- -1
+time_data$sex[time_data$sex == "Female"] <- 1
+time_data$sex <- as.factor(time_data$sex)
+
+# Define generation (e.g., G0 vs G1) based on qlet indicator and convert to factor
+time_data$generation[(time_data$qlet == "A") | (time_data$qlet == "B")] <- 1
+time_data$generation[(time_data$qlet == "M") | (time_data$qlet == "P")] <- -1
+time_data$generation <- as.factor(time_data$generation)
+
+# Convert circular mean angle (radians) to mean hour on a 24-hour clock
+time_data$Mean.Hour <- time_data$Mean.Angle / (2 * pi) * 24
+
+# Define tweet volume weight as log(1 + total tweets)
+time_data$wt <- log1p(time_data$total_tweets)
+
+# Ensure grouping / cluster variables are character (for random effects)
+time_data$linker <- as.character(time_data$linker)
+time_data$Q      <- as.character(time_data$Q)
+
+
+############################################################
+# CREATE OUTCOME-SPECIFIC DATASETS WITH COMPLETE CASES
+############################################################
+
+# Keep rows with valid Mean.Hour
+time_data      <- time_data[complete.cases(time_data$Mean.Hour), ]
+
+# Subsets with non-missing outcome scores
+smfq_time_data <- time_data[complete.cases(time_data$smfq_score), ]
+wem_time_data  <- time_data[complete.cases(time_data$wemwbs_score), ]
+gad_time_data  <- time_data[complete.cases(time_data$gad_score), ]
+
+
+############################################################
+# SMFQ MODELS – ORIGINAL MEAN.HOUR VARIABLE
+############################################################
+
+# 1) SMFQ model with time-of-day terms interacting with sex and generation
+smfq_all_int <- glmer(
+  smfq_score ~ 
+    # First harmonic (24 h) by sex
+    cos(Mean.Hour / 24 * 2 * pi) * sex +
+    sin(Mean.Hour / 24 * 2 * pi) * sex +
+    # Second harmonic (12 h) by sex
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    # First harmonic by generation
+    cos(Mean.Hour / 24 * 2 * pi) * generation +
+    sin(Mean.Hour / 24 * 2 * pi) * generation +
+    # Second harmonic by generation
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    # Random intercepts for individual and questionnaire wave
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+# Model summary
+summary(smfq_all_int)
+
+# Semi-partial R2 for groups of time terms (by harmonic and sine/cosine, including interactions)
+a <- partR2(
+  smfq_all_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", 
+              "cos(Mean.Hour/24 * 2 * pi):sex", 
+              "cos(Mean.Hour/24 * 2 * pi):generation"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", 
+              "sin(Mean.Hour/24 * 2 * pi):sex", 
+              "sin(Mean.Hour/24 * 2 * pi):generation"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", 
+              "cos(2 * (Mean.Hour/24 * 2 * pi)):sex", 
+              "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", 
+              "sin(2 * (Mean.Hour/24 * 2 * pi)):sex", 
+              "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ),
+  data     = smfq_time_data,
+  olre     = FALSE,
+  R2_type  = "marginal",
+  nboot    = 10
+)
+
+# Print marginal R2 for all defined term batches
+print(a$R2, n = 100)
+
+# Conditional R2 including random effects contribution
+partR2(
+  smfq_all_int,
+  data      = smfq_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 2) SMFQ model: time-of-day interacting only with sex (generation as main effect)
+smfq_sex_int <- glmer(
+  smfq_score ~ 
+    cos(Mean.Hour / 24 * 2 * pi) * sex +
+    sin(Mean.Hour / 24 * 2 * pi) * sex +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    generation +
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(smfq_sex_int)
+
+# R2 for grouped time terms in sex interaction model
+a <- partR2(
+  smfq_sex_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex")
+  ),
+  data    = smfq_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2)
+
+partR2(
+  smfq_sex_int,
+  data      = smfq_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 3) SMFQ model: time-of-day interacting only with generation (sex as main effect)
+smfq_gen_int <- glmer(
+  smfq_score ~ 
+    cos(Mean.Hour / 24 * 2 * pi) * generation +
+    sin(Mean.Hour / 24 * 2 * pi) * generation +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(smfq_gen_int)
+
+# R2 for grouped time terms in generation interaction model
+a <- partR2(
+  smfq_gen_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):generation"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):generation"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ),
+  data    = smfq_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2)
+
+partR2(
+  smfq_gen_int,
+  data      = smfq_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 4) SMFQ model with time-of-day terms but no interactions (sex, generation as main effects)
+smfq_noint <- glmer(
+  smfq_score ~ 
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex + generation +
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(smfq_noint)
+
+# Semi-partial R2 for individual time-of-day Fourier terms
+a <- partR2(
+  smfq_noint,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data    = smfq_time_data,
+  olre    = FALSE,
+  R2_type = "marginal"
+)
+
+print(a$R2)
+
+# Conditional R2 including random effects
+partR2(
+  smfq_noint,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 5) SMFQ model with time-of-day terms only (no sex / generation covariates)
+smfq_nocov <- glmer(
+  smfq_score ~ 
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(smfq_nocov)
+
+a <- partR2(
+  smfq_nocov,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data    = smfq_time_data,
+  olre    = FALSE,
+  R2_type = "marginal"
+)
+
+print(a$R2)
+
+partR2(
+  smfq_nocov,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 6) SMFQ model with only covariates (sex, generation) and random effects
+smfq_cov <- glmer(
+  smfq_score ~ sex + generation + (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(smfq_cov)
+
+a <- partR2(
+  smfq_cov,
+  partvars = c("sex", "generation"),
+  data     = time_data,
+  olre     = FALSE,
+  R2_type  = "marginal"
+)
+
+print(a$R2)
+
+partR2(
+  smfq_cov,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 7) SMFQ null model with only random effects (baseline)
+smfq_null <- glmer(
+  smfq_score ~ (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(smfq_null)
+
+
+############################################################
+# SMFQ MODEL COMPARISONS (ANOVA)
+############################################################
+
+# Compare interaction vs non-interaction specifications
+anova(smfq_all_int, smfq_noint)   # Full interactions vs simple time terms
+anova(smfq_sex_int, smfq_noint)   # Sex interactions vs no interactions
+anova(smfq_gen_int, smfq_noint)   # Generation interactions vs no interactions
+
+# Compare which interaction structure fits best
+anova(smfq_all_int, smfq_sex_int)
+anova(smfq_all_int, smfq_gen_int)
+
+# Compare contribution of timing vs covariates vs null
+anova(smfq_noint, smfq_cov)       # Time + covariates vs covariates only
+anova(smfq_nocov, smfq_null)      # Time-only vs null (random effects only)
+
+
+############################################################
+# SMFQ PREDICTION PLOT FOR BEST MODEL (ALL INTERACTIONS)
+############################################################
+
+# Get fixed-effect predictions across all hours
+pred_best_model <- ggpredict(
+  smfq_all_int,
+  terms  = "Mean.Hour [all]",
+  ci.lvl = 0.95,
+  type   = "fixed"
+)
+
+# Base prediction curve with confidence ribbon
+pred_graph <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Average Hour of Tweet Posting", y = "SMFQ Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 10)) +
+  theme(axis.text  = element_text(size = 15, color = "black")) +
+  theme(axis.line  = element_line(size = 0.5, colour = "black")) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+# Add observed SMFQ scores as points weighted by tweet volume
+pred_graph +
+  geom_point(
+    data  = time_data,
+    aes(x = Mean.Hour, y = smfq_score, size = total_tweets),
+    color = "blue"
+  ) +
+  scale_size_area(breaks = c(10, 50, 100, 200, 400, 600, 800, 1000, 1500, 3000, 10000))
+
+
+############################################################
+# WEMWBS MODELS – ORIGINAL MEAN.HOUR VARIABLE
+############################################################
+
+# 1) WEMWBS model with time-of-day interacting with sex and generation
+wem_all_int <- lmer(
+  wemwbs_score ~
+    cos(Mean.Hour / 24 * 2 * pi) * sex +
+    sin(Mean.Hour / 24 * 2 * pi) * sex +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    cos(Mean.Hour / 24 * 2 * pi) * generation +
+    sin(Mean.Hour / 24 * 2 * pi) * generation +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+summary(wem_all_int)
+AIC(wem_all_int)
+BIC(wem_all_int)
+
+# R2 for grouped time terms (WEMWBS all interactions)
+a <- partR2(
+  wem_all_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", 
+              "cos(Mean.Hour/24 * 2 * pi):sex", 
+              "cos(Mean.Hour/24 * 2 * pi):generation"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", 
+              "sin(Mean.Hour/24 * 2 * pi):sex", 
+              "sin(Mean.Hour/24 * 2 * pi):generation"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", 
+              "cos(2 * (Mean.Hour/24 * 2 * pi)):sex", 
+              "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", 
+              "sin(2 * (Mean.Hour/24 * 2 * pi)):sex", 
+              "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  wem_all_int,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 2) WEMWBS time-of-day interacting only with sex
+wem_sex_int <- lmer(
+  wemwbs_score ~
+    cos(Mean.Hour / 24 * 2 * pi) * sex +
+    sin(Mean.Hour / 24 * 2 * pi) * sex +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    generation +
+    (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+AIC(wem_sex_int)
+BIC(wem_sex_int)
+
+a <- partR2(
+  wem_sex_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex")
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2)
+
+partR2(
+  wem_sex_int,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 3) WEMWBS time-of-day interacting only with generation
+wem_gen_int <- lmer(
+  wemwbs_score ~
+    cos(Mean.Hour / 24 * 2 * pi) * generation +
+    sin(Mean.Hour / 24 * 2 * pi) * generation +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+AIC(wem_gen_int)
+BIC(wem_gen_int)
+
+a <- partR2(
+  wem_gen_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):generation"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):generation"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2)
+
+partR2(
+  wem_gen_int,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 4) WEMWBS no interaction model (time-of-day main effects + sex + generation)
+wem_noint <- lmer(
+  wemwbs_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex + generation +
+    (1 | Q) + (1 | linker),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+AIC(wem_noint)
+BIC(wem_noint)
+
+library(partR2)
+
+# R2 for all time and covariate components
+a <- partR2(
+  wem_noint,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))",
+    "sex",
+    "generation"
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  wem_noint,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 5) WEMWBS model with time-of-day only (no covariates)
+wem_nocov <- lmer(
+  wemwbs_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    (1 | Q) + (1 | linker),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+summary(wem_nocov)
+
+AIC(wem_nocov)
+BIC(wem_nocov)
+
+library(partR2)
+
+a <- partR2(
+  wem_nocov,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  wem_nocov,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 6) WEMWBS covariates-only model (sex, generation)
+wem_cov <- lmer(
+  wemwbs_score ~ sex + generation + (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+# 7) WEMWBS null model (random intercepts only)
+wem_null <- lmer(
+  wemwbs_score ~ (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+# Model comparison for WEMWBS
+anova(wem_all_int, wem_noint)
+anova(wem_sex_int, wem_noint)
+anova(wem_gen_int, wem_noint)
+anova(wem_noint, wem_cov)
+anova(wem_nocov, wem_null)
+
+
+############################################################
+# WEMWBS PREDICTION PLOT (NO INTERACTION MODEL)
+############################################################
+
+pred_best_model <- ggpredict(
+  wem_noint,
+  terms  = "Mean.Hour [all]",
+  ci.lvl = 0.95,
+  type   = "fixed"
+)
+
+pred_graph <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Average Hour of Tweet Posting", y = "WEMWBS Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(14, 70), breaks = seq(14, 70, by = 10)) +
+  theme(axis.text  = element_text(size = 15, color = "black")) +
+  theme(axis.line  = element_line(size = 0.5, colour = "black")) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+pred_graph +
+  geom_point(
+    data  = time_data,
+    aes(x = Mean.Hour, y = wemwbs_score, size = total_tweets),
+    color = "blue"
+  ) +
+  scale_size_area(breaks = c(10, 50, 100, 200, 400, 600, 800, 1000, 1500, 3000, 10000))
+
+
+############################################################
+# GAD-7 MODELS – ORIGINAL MEAN.HOUR VARIABLE
+############################################################
+
+# 1) GAD-7 model with time-of-day interacting with sex and generation
+gad_all_int <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) * sex +
+    sin(Mean.Hour / 24 * 2 * pi) * sex +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sex + generation +  # baseline covariates
+    cos(Mean.Hour / 24 * 2 * pi) * generation +
+    sin(Mean.Hour / 24 * 2 * pi) * generation +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(gad_all_int)
+
+a <- partR2(
+  gad_all_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", 
+              "cos(Mean.Hour/24 * 2 * pi):sex", 
+              "cos(Mean.Hour/24 * 2 * pi):generation"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", 
+              "sin(Mean.Hour/24 * 2 * pi):sex", 
+              "sin(Mean.Hour/24 * 2 * pi):generation"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", 
+              "cos(2 * (Mean.Hour/24 * 2 * pi)):sex", 
+              "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", 
+              "sin(2 * (Mean.Hour/24 * 2 * pi)):sex", 
+              "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_all_int,
+  data      = gad_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 2) GAD-7 model with time-of-day interacting only with sex
+gad_sex_int <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) * sex +
+    sin(Mean.Hour / 24 * 2 * pi) * sex +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
+    generation +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(gad_sex_int)
+
+a <- partR2(
+  gad_sex_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):sex"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):sex"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):sex"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):sex")
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_sex_int,
+  data      = gad_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 3) GAD-7 model with time-of-day interacting only with generation
+gad_gen_int <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) * generation +
+    sin(Mean.Hour / 24 * 2 * pi) * generation +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(gad_gen_int)
+
+a <- partR2(
+  gad_gen_int,
+  partbatch = list(
+    cosx  = c("cos(Mean.Hour/24 * 2 * pi)", "cos(Mean.Hour/24 * 2 * pi):generation"),
+    sinx  = c("sin(Mean.Hour/24 * 2 * pi)", "sin(Mean.Hour/24 * 2 * pi):generation"),
+    cos2x = c("cos(2 * (Mean.Hour/24 * 2 * pi))", "cos(2 * (Mean.Hour/24 * 2 * pi)):generation"),
+    sin2x = c("sin(2 * (Mean.Hour/24 * 2 * pi))", "sin(2 * (Mean.Hour/24 * 2 * pi)):generation")
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 10
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_gen_int,
+  data      = gad_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 4) GAD-7 no interaction model (time-of-day main effects, sex, generation)
+gad_noint <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex + generation +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(gad_noint)
+
+a <- partR2(
+  gad_noint,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal"
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_noint,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 5) GAD-7 time-only model (no sex / generation)
+gad_nocov <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+summary(gad_nocov)
+
+a <- partR2(
+  gad_nocov,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal"
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_nocov,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+
+# 6) GAD-7 covariates-only and null models
+gad_cov <- glmer(
+  gad_score ~ sex + generation + (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+gad_null <- glmer(
+  gad_score ~ (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson(),
+  glmerControl(optimizer = c("bobyqa"))
+)
+
+# GAD model ANOVA comparisons
+anova(gad_all_int, gad_noint)
+anova(gad_sex_int, gad_noint)
+anova(gad_gen_int, gad_noint)
+anova(gad_noint, gad_cov)
+anova(gad_nocov, gad_null)
+
+
+############################################################
+# GAD-7 PREDICTION PLOT (GENERATION INTERACTION MODEL)
+############################################################
+
+pred_best_model <- ggpredict(
+  gad_gen_int,
+  terms  = "Mean.Hour [all]",
+  type   = "fixed",
+  ci.lvl = 0.95
+)
+
+pred_graph <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Average Hour of Tweet Posting", y = "GAD-7 Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(0, 21), breaks = seq(0, 21, by = 10)) +
+  theme(axis.text  = element_text(size = 15, color = "black")) +
+  theme(axis.line  = element_line(size = 0.5, colour = "black")) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+pred_graph +
+  geom_point(
+    data  = time_data,
+    aes(x = Mean.Hour, y = gad_score, size = total_tweets),
+    color = "blue"
+  ) +
+  scale_size_area(breaks = c(10, 50, 100, 200, 400, 600, 800, 1000, 1500, 3000, 10000))
+
+
+############################################################
+# STRATIFIED SMFQ MODELS BY SEX
+############################################################
+
+# Subset data by sex
+smfq_male   <- time_data[time_data$sex == -1, ]
+smfq_female <- time_data[time_data$sex == 1, ]
+
+# SMFQ model with time-of-day terms and generation (males only)
+smfq_mod_male <- glmer(
+  smfq_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    generation +
+    (1 | linker) + (1 | Q),
+  data    = smfq_male,
+  weights = smfq_male$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+# Male SMFQ null model (no time-of-day terms)
+smfq_mod_male_null <- glmer(
+  smfq_score ~ generation + (1 | linker) + (1 | Q),
+  data    = smfq_male,
+  weights = smfq_male$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+anova(smfq_mod_male, smfq_mod_male_null)
+
+# R2 for time-of-day components in male-only SMFQ model
+partR2(
+  smfq_mod_male,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data      = smfq_male,
+  olre      = FALSE,
+  max_level = 4,
+  R2_type   = "marginal"
+)
+
+
+# SMFQ model with time-of-day terms and generation (females only)
+smfq_mod_female <- glmer(
+  smfq_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    generation +
+    (1 | linker) + (1 | Q),
+  data    = smfq_female,
+  weights = smfq_female$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+# Female SMFQ null model
+smfq_mod_female_null <- glmer(
+  smfq_score ~ generation + (1 | linker) + (1 | Q),
+  data    = smfq_female,
+  weights = smfq_female$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+anova(smfq_mod_female, smfq_mod_female_null)
+
+partR2(
+  smfq_mod_female,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data      = smfq_female,
+  olre      = FALSE,
+  max_level = 4,
+  R2_type   = "marginal"
+)
+
+# Prediction curves for male vs female SMFQ stratified models
+smfq_male_pred <- ggpredict(
+  smfq_mod_male,
+  terms  = "Mean.Hour [0:23]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+smfq_female_pred <- ggpredict(
+  smfq_mod_female,
+  terms  = "Mean.Hour [0:23]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+# Combine predictions with label indicating sex
+combine_sex_pred <- rbind(
+  cbind(smfq_male_pred,   model = "Male"),
+  cbind(smfq_female_pred, model = "Female")
+)
+
+# Plot SMFQ sex-stratified prediction curves
+ggplot(combine_sex_pred, aes(x, predicted, color = model, fill = model)) +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 10)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = model), alpha = 0.2) +
+  labs(
+    x = "Average Hour of Tweet Posting",
+    y = "Predicted SMFQ Score"
+  ) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+
+############################################################
+# STRATIFIED SMFQ MODELS BY GENERATION
+############################################################
+
+smfq_g0 <- time_data[time_data$generation == -1, ]
+smfq_g1 <- time_data[time_data$generation == 1, ]
+
+# G0 (older generation) SMFQ model: time-of-day + sex
+smfq_g0_mod <- glmer(
+  smfq_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = smfq_g0,
+  weights = smfq_g0$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+# G0 null model (no time-of-day terms)
+smfq_g0_mod_null <- glmer(
+  smfq_score ~ sex + (1 | linker) + (1 | Q),
+  data    = smfq_g0,
+  weights = smfq_g0$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+anova(smfq_g0_mod, smfq_g0_mod_null)
+
+partR2(
+  smfq_g0_mod,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data      = smfq_g0,
+  olre      = FALSE,
+  max_level = 4,
+  R2_type   = "marginal"
+)
+
+# G1 (younger generation) SMFQ model: time-of-day + sex
+smfq_g1_mod <- glmer(
+  smfq_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = smfq_g1,
+  weights = smfq_g1$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+# G1 null model
+smfq_g1_mod_null <- glmer(
+  smfq_score ~ sex + (1 | linker) + (1 | Q),
+  data    = smfq_g1,
+  weights = smfq_g1$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+anova(smfq_g1_mod, smfq_g1_mod_null)
+
+partR2(
+  smfq_g1_mod,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data      = smfq_g1,
+  olre      = FALSE,
+  max_level = 4,
+  R2_type   = "marginal"
+)
+
+# Prediction curves by generation
+smfq_g0_pred <- ggpredict(
+  smfq_g0_mod,
+  terms  = "Mean.Hour [0:23]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+smfq_g1_pred <- ggpredict(
+  smfq_g1_mod,
+  terms  = "Mean.Hour [0:23]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+combine_gen_pred <- rbind(
+  cbind(smfq_g0_pred, model = "G0"),
+  cbind(smfq_g1_pred, model = "G1")
+)
+
+ggplot(combine_gen_pred, aes(x, predicted, color = model, fill = model)) +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 10)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = model), alpha = 0.2) +
+  labs(
+    x = "Average Hour of Tweet Posting",
+    y = "Predicted SMFQ Score"
+  ) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+
+############################################################
+# STRATIFIED GAD-7 MODELS BY GENERATION
+############################################################
+
+gad_g0 <- time_data[time_data$generation == -1, ]
+gad_g1 <- time_data[time_data$generation == 1, ]
+
+# G0 GAD-7 model: time-of-day + sex
+gad_g0_mod <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = gad_g0,
+  weights = gad_g0$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+# G0 GAD-7 null model
+gad_g0_mod_null <- glmer(
+  gad_score ~ sex + (1 | linker) + (1 | Q),
+  data    = gad_g0,
+  weights = gad_g0$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+anova(gad_g0_mod, gad_g0_mod_null)
+
+partR2(
+  gad_g0_mod,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data      = gad_g0,
+  olre      = FALSE,
+  max_level = 4,
+  R2_type   = "marginal"
+)
+
+# G1 GAD-7 model
+gad_g1_mod <- glmer(
+  gad_score ~
+    cos(Mean.Hour / 24 * 2 * pi) +
+    sin(Mean.Hour / 24 * 2 * pi) +
+    cos(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sin(2 * (Mean.Hour / 24 * 2 * pi)) +
+    sex +
+    (1 | linker) + (1 | Q),
+  data    = gad_g1,
+  weights = gad_g1$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+# G1 GAD-7 null model
+gad_g1_mod_null <- glmer(
+  gad_score ~ sex + (1 | linker) + (1 | Q),
+  data    = gad_g1,
+  weights = gad_g1$wt,
+  family  = poisson(),
+  glmerControl(optimizer = "bobyqa")
+)
+
+anova(gad_g1_mod, gad_g1_mod_null)
+
+partR2(
+  gad_g1_mod,
+  partvars = c(
+    "cos(Mean.Hour/24 * 2 * pi)",
+    "sin(Mean.Hour/24 * 2 * pi)",
+    "cos(2 * (Mean.Hour/24 * 2 * pi))",
+    "sin(2 * (Mean.Hour/24 * 2 * pi))"
+  ),
+  data      = gad_g1,
+  olre      = FALSE,
+  max_level = 4,
+  R2_type   = "marginal"
+)
+
+# Prediction curves for GAD-7 by generation
+gad_g0_pred <- ggpredict(
+  gad_g0_mod,
+  terms  = "Mean.Hour [0:23]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+gad_g1_pred <- ggpredict(
+  gad_g1_mod,
+  terms  = "Mean.Hour [0:23]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+combine_gen_pred <- rbind(
+  cbind(gad_g0_pred, model = "G0"),
+  cbind(gad_g1_pred, model = "G1")
+)
+
+ggplot(combine_gen_pred, aes(x, predicted, color = model, fill = model)) +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 10)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = model), alpha = 0.2) +
+  labs(
+    x = "Average Hour of Tweet Posting",
+    y = "Predicted GAD-7 Score"
+  ) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+
+############################################################
+# GENERATING NEW CIRCULAR VARIABLES (MEDIAN-BASED)
+############################################################
+
+# Read per-tweet circular datasets for each questionnaire wave
+time_c1 <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\circ_c1.csv")
+time_c2 <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\circ_c2.csv")
+time_c4 <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\circ_c4.csv")
+time_c5 <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\circ_c5.csv")
+time_c6 <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\circ_c6.csv")
+
+# Helper function:
+# - convert tweet_hour to radians
+# - compute circular summaries by linker
+# - convert circular medians back to clock time in hours
+# - add Q label indicating wave
+process_time_data <- function(data, Q_value) {
+  data %>%
+    mutate(
+      # Convert hour-of-day to angle in radians
+      tweet_angle = tweet_hour / 24 * (2 * pi)
+    ) %>%
+    group_by(linker) %>%
+    summarise(
+      median_hour = median.circular(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter")
+      ),
+      median_HL = medianHL.circular(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter"),
+        method = "HL2"
+      ),
+      var  = angular.variance(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter")
+      ),
+      sd   = sd.circular(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter")
+      ),
+      Rbar = rho.circular(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter")
+      ),
+      Rbar2 = trigonometric.moment(
+        circular(tweet_angle, units = "radians", zero = circular(0), rotation = "counter"),
+        p = 2
+      )$rho,
+      # Circular concentration estimator
+      delhat = (1 - Rbar2) / (2 * Rbar^2)
+    ) %>%
+    mutate(
+      # Wrap circular medians into [0, 2π)
+      median_hour = ifelse(median_hour < 0, median_hour + 2 * pi, median_hour),
+      median_HL   = ifelse(median_HL   < 0, median_HL   + 2 * pi, median_HL),
+      # Convert circular medians back to hours [0, 24)
+      median_hour = (median_hour / (2 * pi)) * 24,
+      median_HL   = (median_HL   / (2 * pi)) * 24,
+      # Add questionnaire wave identifier
+      Q = Q_value
+    )
+}
+
+# Apply function to each wave and stack into one result
+result_all <- bind_rows(
+  process_time_data(time_c1, Q_value = "1"),
+  process_time_data(time_c2, Q_value = "2"),
+  process_time_data(time_c4, Q_value = "4"),
+  process_time_data(time_c5, Q_value = "5"),
+  process_time_data(time_c6, Q_value = "6")
+)
+
+# Merge circular summary measures back into main dataset (by linker and wave)
+final_result <- result_all %>%
+  left_join(time_data, by = c("linker", "Q"))
+
+
+############################################################
+# WEMWBS MODELS – MEDIAN-HOUR VARIABLE
+############################################################
+
+# Restrict to cases with non-missing WEMWBS score
+wem_time_data <- final_result[complete.cases(final_result$wemwbs_score), ]
+
+# No interaction model with circular median_hour and covariates
+wem_noint <- lmer(
+  wemwbs_score ~
+    cos(median_hour / 24 * 2 * pi) +
+    sin(median_hour / 24 * 2 * pi) +
+    cos(2 * (median_hour / 24 * 2 * pi)) +
+    sin(2 * (median_hour / 24 * 2 * pi)) +
+    sex + generation +
+    (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+AIC(wem_noint)
+BIC(wem_noint)
+
+summary(wem_noint)
+
+a <- partR2(
+  wem_noint,
+  partvars = c(
+    "cos(median_hour/24 * 2 * pi)",
+    "sin(median_hour/24 * 2 * pi)",
+    "cos(2 * (median_hour/24 * 2 * pi))",
+    "sin(2 * (median_hour/24 * 2 * pi))"
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  wem_noint,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+# WEMWBS time-only model using median_hour
+wem_nocov <- lmer(
+  wemwbs_score ~
+    cos(median_hour / 24 * 2 * pi) +
+    sin(median_hour / 24 * 2 * pi) +
+    cos(2 * (median_hour / 24 * 2 * pi)) +
+    sin(2 * (median_hour / 24 * 2 * pi)) +
+    (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+AIC(wem_nocov)
+BIC(wem_nocov)
+
+summary(wem_nocov)
+
+a <- partR2(
+  wem_nocov,
+  partvars = c(
+    "cos(median_hour/24 * 2 * pi)",
+    "sin(median_hour/24 * 2 * pi)",
+    "cos(2 * (median_hour/24 * 2 * pi))",
+    "sin(2 * (median_hour/24 * 2 * pi))"
+  ),
+  data    = wem_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  wem_nocov,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+# Covariates-only and null models with median_hour dataset
+wem_cov <- lmer(
+  wemwbs_score ~ sex + generation + (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+wem_null <- lmer(
+  wemwbs_score ~ (1 | linker) + (1 | Q),
+  data    = wem_time_data,
+  weights = wem_time_data$wt
+)
+
+# Compare models for WEMWBS median-based analyses
+anova(wem_noint, wem_cov)
+anova(wem_nocov, wem_null)
+
+# Total tweet count for WEMWBS dataset (median-based)
+sum(wem_time_data$total_tweets)
+
+# Prediction plot using median_hour (no interaction model)
+pred_best_model <- ggpredict(
+  wem_noint,
+  terms  = "median_hour [all]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+print(pred_best_model, n = Inf)
+summary(pred_best_model)
+
+pred_graph_med <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Median Hour of Tweet Posting", y = "WEMWBS Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(14, 70), breaks = seq(14, 70, by = 10)) +
+  theme(axis.text  = element_text(size = 15, color = "black")) +
+  theme(axis.line  = element_line(size = 0.5, colour = "black")) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+pred_graph_med
+
+med_graph <- pred_graph_med +
+  geom_point(
+    data  = final_result,
+    aes(x = median_hour, y = wemwbs_score, size = total_tweets),
+    color = "blue"
+  ) +
+  scale_size_area(breaks = c(10, 50, 100, 200, 400, 600, 800, 1000, 1500, 3000, 10000))
+
+
+############################################################
+# DUPLICATE PREDICTION GRAPH FOR MEDIAN-HOUR (CLEAN VERSION)
+############################################################
+
+pred_best_model <- ggpredict(
+  wem_noint,
+  terms  = "median_hour [all]",
+  type   = "fe",
+  ci.lvl = 0.95
+)
+
+print(pred_best_model, n = Inf)
+summary(pred_best_model)
+
+pred_graph_median <- ggplot(pred_best_model, aes(x, predicted)) +
+  geom_line() +
+  labs(x = "Median Hour of Tweet Posting", y = "WEMWBS Score") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  scale_y_continuous(limits = c(14, 70), breaks = seq(14, 70, by = 10)) +
+  theme(axis.text  = element_text(size = 15, color = "black")) +
+  theme(axis.line  = element_line(size = 0.5, colour = "black")) +
+  theme(
+    axis.title.x = element_text(size = 15),
+    axis.title.y = element_text(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.text.y  = element_text(size = 15)
+  )
+
+median_graph <- pred_graph_median +
+  geom_point(
+    data  = wem_time_data,
+    aes(x = median_hour, y = wemwbs_score, size = total_tweets),
+    color = "blue"
+  ) +
+  scale_size_area(breaks = c(10, 50, 100, 200, 400, 600, 800, 1000, 1500, 3000, 10000)
+
+median_graph
+
+
+############################################################
+# SMFQ MODELS – MEDIAN-HOUR VARIABLE
+############################################################
+
+smfq_time_data <- final_result[complete.cases(final_result$smfq_score), ]
+
+# No-interaction SMFQ model using median_hour, sex, generation
+smfq_noint <- glmer(
+  smfq_score ~
+    cos(median_hour / 24 * 2 * pi) +
+    sin(median_hour / 24 * 2 * pi) +
+    cos(2 * (median_hour / 24 * 2 * pi)) +
+    sin(2 * (median_hour / 24 * 2 * pi)) +
+    sex + generation +
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson()
+)
+
+AIC(smfq_noint)
+BIC(smfq_noint)
+
+summary(smfq_noint)
+
+a <- partR2(
+  smfq_noint,
+  partvars = c(
+    "cos(median_hour/24 * 2 * pi)",
+    "sin(median_hour/24 * 2 * pi)",
+    "cos(2 * (median_hour/24 * 2 * pi))",
+    "sin(2 * (median_hour/24 * 2 * pi))"
+  ),
+  data    = smfq_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  smfq_noint,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+# Time-only SMFQ model using median_hour
+smfq_nocov <- glmer(
+  smfq_score ~
+    cos(median_hour / 24 * 2 * pi) +
+    sin(median_hour / 24 * 2 * pi) +
+    cos(2 * (median_hour / 24 * 2 * pi)) +
+    sin(2 * (median_hour / 24 * 2 * pi)) +
+    (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson()
+)
+
+AIC(smfq_nocov)
+BIC(smfq_nocov)
+
+summary(smfq_nocov)
+
+a <- partR2(
+  smfq_nocov,
+  partvars = c(
+    "cos(median_hour/24 * 2 * pi)",
+    "sin(median_hour/24 * 2 * pi)",
+    "cos(2 * (median_hour/24 * 2 * pi))",
+    "sin(2 * (median_hour/24 * 2 * pi))"
+  ),
+  data    = smfq_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  smfq_nocov,
+  data      = time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+# Covariates-only and null SMFQ models (median-based dataset)
+smfq_cov <- glmer(
+  smfq_score ~ sex + generation + (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson()
+)
+
+smfq_null <- glmer(
+  smfq_score ~ (1 | linker) + (1 | Q),
+  data    = smfq_time_data,
+  weights = smfq_time_data$wt,
+  family  = poisson()
+)
+
+anova(smfq_noint, smfq_cov)
+anova(smfq_nocov, smfq_null)
+
+sum(smfq_time_data$total_tweets)
+
+
+############################################################
+# GAD-7 MODELS – MEDIAN-HOUR VARIABLE
+############################################################
+
+gad_time_data <- final_result[complete.cases(final_result$gad_score), ]
+
+# GAD-7 no-interaction model using median_hour, sex, generation
+gad_noint <- glmer(
+  gad_score ~
+    cos(median_hour / 24 * 2 * pi) +
+    sin(median_hour / 24 * 2 * pi) +
+    cos(2 * (median_hour / 24 * 2 * pi)) +
+    sin(2 * (median_hour / 24 * 2 * pi)) +
+    sex + generation +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson()
+)
+
+AIC(gad_noint)
+BIC(gad_noint)
+
+summary(gad_noint)
+
+a <- partR2(
+  gad_noint,
+  partvars = c(
+    "cos(median_hour/24 * 2 * pi)",
+    "sin(median_hour/24 * 2 * pi)",
+    "cos(2 * (median_hour/24 * 2 * pi))",
+    "sin(2 * (median_hour/24 * 2 * pi))"
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_noint,
+  data      = gad_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+# GAD-7 time-only model using median_hour
+gad_nocov <- glmer(
+  gad_score ~
+    cos(median_hour / 24 * 2 * pi) +
+    sin(median_hour / 24 * 2 * pi) +
+    cos(2 * (median_hour / 24 * 2 * pi)) +
+    sin(2 * (median_hour / 24 * 2 * pi)) +
+    (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson()
+)
+
+AIC(gad_nocov)
+BIC(gad_nocov)
+
+summary(gad_nocov)
+
+a <- partR2(
+  gad_nocov,
+  partvars = c(
+    "cos(median_hour/24 * 2 * pi)",
+    "sin(median_hour/24 * 2 * pi)",
+    "cos(2 * (median_hour/24 * 2 * pi))",
+    "sin(2 * (median_hour/24 * 2 * pi))"
+  ),
+  data    = gad_time_data,
+  olre    = FALSE,
+  R2_type = "marginal",
+  nboot   = 5
+)
+
+print(a$R2, n = 100)
+
+partR2(
+  gad_nocov,
+  data      = gad_time_data,
+  olre      = FALSE,
+  max_level = 1,
+  R2_type   = "conditional"
+)
+
+# Covariates-only and null models for GAD-7 (median-based)
+gad_cov <- glmer(
+  gad_score ~ sex + generation + (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson()
+)
+
+gad_null <- glmer(
+  gad_score ~ (1 | linker) + (1 | Q),
+  data    = gad_time_data,
+  weights = gad_time_data$wt,
+  family  = poisson()
+)
+
+anova(gad_noint, gad_cov)
+anova(gad_nocov, gad_null)
+
+sum(gad_time_data$total_tweets)
