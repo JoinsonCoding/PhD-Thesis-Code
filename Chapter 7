@@ -1,1 +1,235 @@
+# ===============================
+# LOAD LIBRARIES
+# ===============================
+library(lavaan)
+library(dplyr)
+library(lavaan.mi)
+library(mice)
 
+# ===============================
+# LOAD DATA
+# ===============================
+med_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\med_tweets.csv")
+freq_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\freq_df.csv")
+
+# ===============================
+# CLEANING DEMOGRAPHIC VARIABLES
+# ===============================
+
+# --- Sex ---
+med_data$sex[med_data$sex == "Male"] <- -1
+med_data$sex[med_data$sex == "Female"] <- 1
+med_data$sex <- as.factor(med_data$sex)
+
+# --- Total tweets (log transformed for weighting) ---
+med_data$wt <- log1p(med_data$total_tweets)
+
+# --- Mother Education ---
+med_data$mother_ed[med_data$mother_ed == ""] <- NA
+med_data$mother_ed[med_data$mother_ed == "A level"] <- 4
+med_data$mother_ed[med_data$mother_ed == "CSE"] <- 2
+med_data$mother_ed[med_data$mother_ed == "Degree"] <- 5
+med_data$mother_ed[med_data$mother_ed == "Missing"] <- NA
+med_data$mother_ed[med_data$mother_ed == "O level"] <- 3
+med_data$mother_ed[med_data$mother_ed == "Vocational"] <- 1
+med_data$mother_ed <- as.numeric(med_data$mother_ed)
+
+# --- Partner Education ---
+med_data$partner_ed[med_data$partner_ed %in% c("", "-1.0")] <- NA
+med_data$partner_ed[med_data$partner_ed == "A level"] <- 4
+med_data$partner_ed[med_data$partner_ed == "CSE"] <- 2
+med_data$partner_ed[med_data$partner_ed == "Degree"] <- 5
+med_data$partner_ed[med_data$partner_ed == "O level"] <- 3
+med_data$partner_ed[med_data$partner_ed == "Vocational"] <- 1
+med_data$partner_ed <- as.numeric(med_data$partner_ed)
+
+# --- Maternal SES ---
+med_data$mat_ses[med_data$mat_ses == ""] <- NA
+med_data$mat_ses[med_data$mat_ses == "I"] <- 1
+med_data$mat_ses[med_data$mat_ses == "II"] <- 2
+med_data$mat_ses[med_data$mat_ses == "III (manual)"] <- 3
+med_data$mat_ses[med_data$mat_ses == "III (non-manual)"] <- 4
+med_data$mat_ses[med_data$mat_ses == "IV"] <- 5
+med_data$mat_ses[med_data$mat_ses == "Missing"] <- NA
+med_data$mat_ses[med_data$mat_ses == "V"] <- 6
+med_data$mat_ses <- as.numeric(med_data$mat_ses)
+
+# --- Paternal SES ---
+med_data$pat_ses[med_data$pat_ses == ""] <- NA
+med_data$pat_ses[med_data$pat_ses == "I"] <- 1
+med_data$pat_ses[med_data$pat_ses == "II"] <- 2
+med_data$pat_ses[med_data$pat_ses == "III (manual)"] <- 3
+med_data$pat_ses[med_data$pat_ses == "III (non-manual)"] <- 4
+med_data$pat_ses[med_data$pat_ses == "IV"] <- 5
+med_data$pat_ses[med_data$pat_ses == "Missing"] <- NA
+med_data$pat_ses[med_data$pat_ses == "V"] <- 6
+med_data$pat_ses <- as.numeric(med_data$pat_ses)
+
+# ===============================
+# CREATE PASSIVE INDEX
+# ===============================
+
+# Map Twitter frequency number to median values
+medians <- c(`1` = 22.5, `2` = 88.5, `3` = 111, `4` = 294, `5` = 1521)
+med_data$freq_median <- medians[as.character(med_data$twitter_freq_num)]
+
+# Compute passive index (tweets above/below median)
+med_data$passive_index <- med_data$total_tweets - med_data$freq_median
+
+# ===============================
+# PREPARE DATA FOR MULTIPLE IMPUTATION
+# ===============================
+med <- med_data[, c('passive_index', 'sex', 'generation', 'total_tweets', 'old_total_scaared', 
+                    'sdq_old_ext', 'sdq_ad_ext', 'sdq_old_int', 'sdq_ad_int', 'ad_total_mfq', 'old_total_mfq',
+                    'ad_dawba_anx', 'twitter_freq_num', 'deep_night', 'pat_ses', 'mat_ses', 
+                    'mother_ed', 'partner_ed', 'Mean.RB.Negative', 'wt')]
+
+# Scale and numeric conversion
+med$passive_index <- as.numeric(scale(med$passive_index))
+
+# Log-transform skewed variables
+med$old_total_scaared <- log1p(med$old_total_scaared)
+med$sdq_old_int <- log1p(med$sdq_old_int)
+med$sdq_ad_int <- log1p(med$sdq_ad_int)
+med$sdq_ad_ext <- log1p(med$sdq_ad_ext)
+med$sdq_old_ext <- log1p(med$sdq_old_ext)
+med$old_total_mfq <- log1p(med$old_total_mfq)
+med$ad_total_mfq <- log1p(med$ad_total_mfq)
+
+# Clean categorical anxiety variable
+med$ad_dawba_anx[med$ad_dawba_anx == ""] <- NA
+med$ad_dawba_anx[med$ad_dawba_anx == "~0.5%"] <- 1
+med$ad_dawba_anx[med$ad_dawba_anx == "~15%"] <- 2
+med$ad_dawba_anx[med$ad_dawba_anx == "~3%"] <- 3
+med$ad_dawba_anx[med$ad_dawba_anx == "~50%"] <- 4
+med$ad_dawba_anx <- as.numeric(med$ad_dawba_anx)
+
+# ===============================
+# MULTIPLE IMPUTATION
+# ===============================
+medimp <- mice(med, m = 10, maxit = 10, printFlag = FALSE, seed = 456)
+medimpdata <- complete(medimp, 1)
+
+# ===============================
+# MEDIATION MODELS
+# -------------------------------
+# Each section has 3 mediators: passive_index, deep_night, Mean.RB.Negative
+# Outcomes: MFQ, Anxiety, SDQ internalising, SDQ externalising
+# Covariates: sex, parental education, parental SES
+# ===============================
+
+# --- MFQ Models ---
+model_mfq_pi <- '
+passive_index ~ a*ad_total_mfq + sex + mother_ed + partner_ed + mat_ses + pat_ses
+old_total_mfq ~ cPrime*ad_total_mfq + b*passive_index + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_mfq_pi, data = medimp, se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE, nd = 5)
+
+model_mfq_dn <- '
+deep_night ~ a*ad_total_mfq + sex + mother_ed + partner_ed + mat_ses + pat_ses
+old_total_mfq ~ cPrime*ad_total_mfq + b*deep_night + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_mfq_dn, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_mfq_rb <- '
+Mean.RB.Negative ~ a*ad_total_mfq + sex + mother_ed + partner_ed + mat_ses + pat_ses
+old_total_mfq ~ cPrime*ad_total_mfq + b*Mean.RB.Negative + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_mfq_rb, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+# --- Anxiety Models ---
+model_anx_pi <- '
+passive_index ~ a*ad_dawba_anx + sex + mother_ed + partner_ed + mat_ses + pat_ses
+old_total_scaared ~ cPrime*ad_dawba_anx + b*passive_index + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_anx_pi, data = medimp, se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_anx_dn <- '
+deep_night ~ a*ad_dawba_anx + sex + mother_ed + partner_ed + mat_ses + pat_ses
+old_total_scaared ~ cPrime*ad_dawba_anx + b*deep_night + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_anx_dn, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_anx_rb <- '
+Mean.RB.Negative ~ a*ad_dawba_anx + sex + mother_ed + partner_ed + mat_ses + pat_ses
+old_total_scaared ~ cPrime*ad_dawba_anx + b*Mean.RB.Negative + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_anx_rb, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+# ===============================
+# SDQ Internalising Models
+# ===============================
+model_int_pi <- '
+passive_index ~ a*sdq_ad_int + sex + mother_ed + partner_ed + mat_ses + pat_ses
+sdq_old_int ~ cPrime*sdq_ad_int + b*passive_index + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_int_pi, data = medimp, se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_int_dn <- '
+deep_night ~ a*sdq_ad_int + sex + mother_ed + partner_ed + mat_ses + pat_ses
+sdq_old_int ~ cPrime*sdq_ad_int + b*deep_night + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_int_dn, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_int_rb <- '
+Mean.RB.Negative ~ a*sdq_ad_int + sex + mother_ed + partner_ed + mat_ses + pat_ses
+sdq_old_int ~ cPrime*sdq_ad_int + b*Mean.RB.Negative + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_int_rb, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+# ===============================
+# SDQ Externalising Models
+# ===============================
+model_ext_pi <- '
+passive_index ~ a*sdq_ad_ext + sex + mother_ed + partner_ed + mat_ses + pat_ses
+sdq_old_ext ~ cPrime*sdq_ad_ext + b*passive_index + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_ext_pi, data = medimp, se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_ext_dn <- '
+deep_night ~ a*sdq_ad_ext + sex + mother_ed + partner_ed + mat_ses + pat_ses
+sdq_old_ext ~ cPrime*sdq_ad_ext + b*deep_night + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_ext_dn, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
+
+model_ext_rb <- '
+Mean.RB.Negative ~ a*sdq_ad_ext + sex + mother_ed + partner_ed + mat_ses + pat_ses
+sdq_old_ext ~ cPrime*sdq_ad_ext + b*Mean.RB.Negative + sex + mother_ed + partner_ed + mat_ses + pat_ses
+ab := a*b
+c := cPrime + ab
+'
+fit <- cfa.mi(model_ext_rb, data = medimp, sampling.weights = "wt", se = "robust", estimator = "MLR")
+summary(fit, ci = TRUE)
