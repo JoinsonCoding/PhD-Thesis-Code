@@ -413,3 +413,72 @@ summary(quote_smfq)
 
 
 
+
+# =====================================================================
+# Models for H5 (Moderation by Sentiment of Tweet)
+# =====================================================================
+
+pos_rep_mfq <- lmer(
+  smfq_score ~ prop_rep * Mean.RB.Positive.Score.T +
+    sex + generation + ed_new +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(pos_rep_mfq)
+confint(pos_rep_mfq, method = "Wald")
+
+neg_rep_mfq <- lmer(
+  smfq_score ~ prop_rep * Mean.RB.Negative.Score.T +
+    sex + generation + ed_new +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(neg_rep_mfq)
+confint(neg_rep_mfq, method = "Wald")
+
+
+
+pos_rep_gad <- lmer(
+  gad_score ~ prop_rep * Mean.RB.Positive.Score.T +
+    sex + generation + ed_new +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(pos_rep_gad)
+confint(pos_rep_gad, method = "Wald")
+
+neg_rep_gad <- lmer(
+  gad_score ~ prop_rep * Mean.RB.Negative.Score.T +
+    sex + generation + ed_new +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(neg_rep_gad)
+confint(neg_rep_gad, method = "Wald")
+
+
+pos_rep_wem <- lmer(
+  wemwbs_score ~ prop_rep * Mean.RB.Positive.Score.T +
+    sex + generation + ed_new +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(pos_rep_wem)
+confint(pos_rep_wem, method = "Wald")
+
+neg_rep_wem <- lmer(
+  wemwbs_score ~ prop_rep * Mean.RB.Negative.Score.T +
+    sex + generation + ed_new +
+    (1 | linker) + Q,
+  data = active_target,
+  weights = log1p(total_rep)
+)
+summary(neg_rep_wem)
+confint(neg_rep_wem, method = "Wald")
+
+
