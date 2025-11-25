@@ -1,1 +1,258 @@
+############################################################
+#  LOAD REQUIRED PACKAGES
+############################################################
 
+library(lme4)
+library(ggplot2)
+library(dplyr)
+library(partR2)
+
+
+############################################################
+#  LOAD AND PREPARE DATA
+############################################################
+
+sent_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_sent.csv")
+
+# Convert sex to numeric-coded factor
+sent_data$sex[sent_data$sex == "Male"]   <- -1
+sent_data$sex[sent_data$sex == "Female"] <-  1
+sent_data$sex <- as.factor(sent_data$sex)
+
+# Generation variable coded by questionnaire letter
+sent_data$generation[(sent_data$qlet %in% c("A","B"))] <-  1
+sent_data$generation[(sent_data$qlet %in% c("M","P"))] <- -1
+sent_data$generation <- as.factor(sent_data$generation)
+
+# Check variable conversion
+table(sent_data$sex)
+table(sent_data$generation)
+
+# Log-transform tweet count for weighting
+sent_data$wt <- log1p(sent_data$total_tweets)
+
+# Convert identifiers to character
+sent_data$linker <- as.character(sent_data$linker) # participant ID
+sent_data$Q      <- as.character(sent_data$Q)      # questionnaire/timepoint
+
+
+############################################################
+#  SMFQ MAIN MIXED EFFECT MODELS — AVERAGE PROPORTION
+############################################################
+
+# LIWC Positive
+smfq_avp_liwc_pos <- glmer(
+  smfq_score ~ Mean.Posemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_avp_liwc_pos)
+confint(smfq_avp_liwc_pos, method = "Wald")
+partR2(smfq_avp_liwc_pos, partvars = c("Mean.Posemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# LIWC Negative
+smfq_avp_liwc_neg <- glmer(
+  smfq_score ~ Mean.Negemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_avp_liwc_neg)
+confint(smfq_avp_liwc_neg, method = "Wald")
+partR2(smfq_avp_liwc_neg, partvars = c("Mean.Negemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# VADER Positive
+smfq_avp_vad_pos <- glmer(
+  smfq_score ~ Mean.VADER.Positive.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_avp_vad_pos)
+confint(smfq_avp_vad_pos, method = "Wald")
+partR2(smfq_avp_vad_pos, partvars = c("Mean.VADER.Positive.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# VADER Negative
+smfq_avp_vad_neg <- glmer(
+  smfq_score ~ Mean.VADER.Negative.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_avp_vad_neg)
+confint(smfq_avp_vad_neg, method = "Wald")
+partR2(smfq_avp_vad_neg, partvars = c("Mean.VADER.Negative.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# RB Positive
+smfq_avp_rb_pos <- glmer(
+  smfq_score ~ Mean.RB.Positive + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_avp_rb_pos)
+confint(smfq_avp_rb_pos, method = "Wald")
+partR2(smfq_avp_rb_pos, partvars = c("Mean.RB.Positive"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# RB Negative
+smfq_avp_rb_neg <- glmer(
+  smfq_score ~ Mean.RB.Negative + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_avp_rb_neg)
+confint(smfq_avp_rb_neg, method = "Wald")
+partR2(smfq_avp_rb_neg, partvars = c("Mean.RB.Negative"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+
+############################################################
+#  GAD MAIN MIXED EFFECT MODELS — AVERAGE PROPORTION
+############################################################
+
+# LIWC Positive
+gad_avp_liwc_pos <- glmer(
+  gad_score ~ Mean.Posemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(gad_avp_liwc_pos)
+confint(gad_avp_liwc_pos, method = "Wald")
+partR2(gad_avp_liwc_pos, partvars = c("Mean.Posemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# LIWC Negative
+gad_avp_liwc_neg <- glmer(
+  gad_score ~ Mean.Negemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(gad_avp_liwc_neg)
+confint(gad_avp_liwc_neg, method = "Wald")
+partR2(gad_avp_liwc_neg, partvars = c("Mean.Negemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# VADER Positive
+gad_avp_vad_pos <- glmer(
+  gad_score ~ Mean.VADER.Positive.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(gad_avp_vad_pos)
+confint(gad_avp_vad_pos, method = "Wald")
+partR2(gad_avp_vad_pos, partvars = c("Mean.VADER.Positive.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# VADER Negative
+gad_avp_vad_neg <- glmer(
+  gad_score ~ Mean.VADER.Negative.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(gad_avp_vad_neg)
+confint(gad_avp_vad_neg, method = "Wald")
+partR2(gad_avp_vad_neg, partvars = c("Mean.VADER.Negative.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# RB Positive
+gad_avp_rb_pos <- glmer(
+  gad_score ~ Mean.RB.Positive + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(gad_avp_rb_pos)
+confint(gad_avp_rb_pos, method = "Wald")
+partR2(gad_avp_rb_pos, partvars = c("Mean.RB.Positive"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# RB Negative
+gad_avp_rb_neg <- glmer(
+  gad_score ~ Mean.RB.Negative + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(gad_avp_rb_neg)
+confint(gad_avp_rb_neg, method = "Wald")
+partR2(gad_avp_rb_neg, partvars = c("Mean.RB.Negative"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+
+############################################################
+#  WEMWBS MAIN MIXED EFFECT MODELS — AVERAGE PROPORTION
+############################################################
+
+# LIWC Positive
+wemwbs_avp_liwc_pos <- lmer(
+  wemwbs_score ~ Mean.Posemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt
+)
+summary(wemwbs_avp_liwc_pos)
+confint(wemwbs_avp_liwc_pos, method = "Wald")
+partR2(wemwbs_avp_liwc_pos, partvars = c("Mean.Posemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# LIWC Negative
+wemwbs_avp_liwc_neg <- lmer(
+  wemwbs_score ~ Mean.Negemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt
+)
+summary(wemwbs_avp_liwc_neg)
+confint(wemwbs_avp_liwc_neg, method = "Wald")
+partR2(wemwbs_avp_liwc_neg, partvars = c("Mean.Negemo.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# VADER Positive
+wemwbs_avp_vad_pos <- lmer(
+  wemwbs_score ~ Mean.VADER.Positive.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt
+)
+summary(wemwbs_avp_vad_pos)
+confint(wemwbs_avp_vad_pos, method = "Wald")
+partR2(wemwbs_avp_vad_pos, partvars = c("Mean.VADER.Positive.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# VADER Negative
+wemwbs_avp_vad_neg <- lmer(
+  wemwbs_score ~ Mean.VADER.Negative.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt
+)
+summary(wemwbs_avp_vad_neg)
+confint(wemwbs_avp_vad_neg, method = "Wald")
+partR2(wemwbs_avp_vad_neg, partvars = c("Mean.VADER.Negative.Score"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# RB Positive
+wemwbs_avp_rb_pos <- lmer(
+  wemwbs_score ~ Mean.RB.Positive + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt
+)
+summary(wemwbs_avp_rb_pos)
+confint(wemwbs_avp_rb_pos, method = "Wald")
+partR2(wemwbs_avp_rb_pos, partvars = c("Mean.RB.Positive"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# RB Negative
+wemwbs_avp_rb_neg <- lmer(
+  wemwbs_score ~ Mean.RB.Negative + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt
+)
+summary(wemwbs_avp_rb_neg)
+confint(wemwbs_avp_rb_neg, method = "Wald")
+partR2(wemwbs_avp_rb_neg, partvars = c("Mean.RB.Negative"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+
+############################################################
+#  SECONDARY MIXED EFFECT MODELS — POSITIVE/NEGATIVE VARIABILITY & INSTABILITY
+############################################################
+
+# (SMFQ, GAD, WEM secondary models for MSSD, Std, etc.)
+# [Follow same tidy formatting: header, GLMM/LMM call, summary, confint, partR2]
+
+# Example: SMFQ Negative Emotion Instability
+smfq_mssd_neg <- glmer(
+  smfq_score ~ Negemo.MSSD + Mean.Negemo.Score + sex + generation + (1|linker) + Q,
+  data = sent_data, weights = sent_data$wt,
+  family = poisson(),
+  control = glmerControl(optimizer = "bobyqa")
+)
+summary(smfq_mssd_neg)
+confint(smfq_mssd_neg, method = "Wald")
+partR2(smfq_mssd_neg, partvars = c("Negemo.MSSD"), data = sent_data, olre = FALSE, R2_type = "marginal")
+
+# Repeat this pattern for all secondary models (Posemo, VADER, RB, GAD, WEMWBS)
