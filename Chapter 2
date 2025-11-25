@@ -1,1 +1,238 @@
+###############################################
+### LOAD REQUIRED PACKAGES
+###############################################
 
+library(gridExtra)
+library(dplyr)
+library(ggplot2)
+library(circular)
+
+
+###############################################
+### READ DATA
+###############################################
+
+main_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\main_df.csv")
+
+# Replace empty strings with NA for specific variables
+main_data$pre_finance[main_data$pre_finance == ""] <- NA
+main_data$ed_new[main_data$ed_new == ""] <- NA
+
+table(main_data$sex)
+table(main_data$generation)
+table(main_data$ed_new)
+table(main_data$pre_finance)
+
+###############################################
+### CIRCULAR STATISTICAL TESTS (Pewsey, 2013)
+###############################################
+
+# ------------------------------------------------
+# Common Distribution Test: Compute Cosine/Sine Scores
+# ------------------------------------------------
+CosSinUniScores <- function(cdat) {
+  N <- length(cdat)
+  ranks <- rank(cdat, ties.method = "random")
+  list(
+    cos(ranks * 2 * pi / N),
+    sin(ranks * 2 * pi / N)
+  )
+}
+
+# ------------------------------------------------
+# Compute Wg Statistic for Group Differences in Distribution
+# ------------------------------------------------
+WgVal <- function(CSUScores, ndat, g) {
+  CosUScores <- CSUScores[[1]]
+  SinUScores <- CSUScores[[2]]
+  N <- length(CosUScores)
+  ndatcsum <- cumsum(ndat)
+  
+  Wg <- 0
+  for (k in 1:g) {
+    low <- ifelse(k == 1, 0, ndatcsum[k - 1])
+    idx <- (low + 1):(low + ndat[k])
+    
+    sumCkSq <- (sum(CosUScores[idx]))^2
+    sumSkSq <- (sum(SinUScores[idx]))^2
+    
+    Wg <- Wg + (sumCkSq + sumSkSq) / ndat[k]
+  }
+  2 * Wg
+}
+
+# ------------------------------------------------
+# Common Mean Direction Test (Yg Statistic)
+# ------------------------------------------------
+YgVal <- function(cdat, ndat, g) {
+  N <- length(cdat)
+  ndatcsum <- cumsum(ndat)
+  
+  delhat <- numeric(g)
+  tbar <- numeric(g)
+  
+  for (k in 1:g) {
+    low <- ifelse(k == 1, 0, ndatcsum[k - 1])
+    sample <- circular(cdat[(low + 1):(low + ndat[k])])
+    
+    tm1 <- trigonometric.moment(sample, p = 1)
+    tm2 <- trigonometric.moment(sample, p = 2)
+    
+    Rbar1 <- tm1$rho
+    Rbar2 <- tm2$rho
+    tbar[k] <- tm1$mu
+    delhat[k] <- (1 - Rbar2) / (2 * Rbar1^2)
+  }
+  
+  # Use stable or unstable version of estimator depending on ratio
+  if (max(delhat) / min(delhat) <= 4) {
+    CP <- sum(ndat * cos(tbar))
+    SP <- sum(ndat * sin(tbar))
+    RP <- sqrt(CP^2 + SP^2)
+    
+    dhat0 <- sum(ndat * delhat) / N
+    return(2 * (N - RP) / dhat0)
+    
+  } else {
+    CM <- sum((ndat * cos(tbar)) / delhat)
+    SM <- sum((ndat * sin(tbar)) / delhat)
+    Yg <- sum(ndat / delhat)
+    RM <- sqrt(CM^2 + SM^2)
+    
+    return(2 * (Yg - RM))
+  }
+}
+
+
+###############################################
+### SEX DIFFERENCES ANALYSIS
+###############################################
+
+### --- Tweet Type: Total Tweets, RT Proportion, Reply Proportion --- ###
+
+wilcox.test(total_tweets ~ sex, data = main_data)
+wilcox.test(prop_rt ~ sex, data = main_data)
+wilcox.test(prop_rep ~ sex, data = main_data)
+
+main_data %>%
+  group_by(sex) %>%
+  summarise(
+    median = median(total_tweets, na.rm = TRUE),
+    iqr = IQR(total_tweets, na.rm = TRUE)
+  )
+
+main_data %>%
+  group_by(sex) %>%
+  summarise(
+    median = median(prop_rt, na.rm = TRUE),
+    iqr = IQR(prop_rt, na.rm = TRUE)
+  )
+
+main_data %>%
+  group_by(sex) %>%
+  summarise(
+    median = median(prop_rep, na.rm = TRUE),
+    iqr = IQR(prop_rep, na.rm = TRUE)
+  )
+
+
+### --- Sentiment of Tweets (LIWC + RB Lexicons) --- ###
+
+wilcox.test(Mean.RB.Positive ~ sex, data = main_data)
+wilcox.test(Mean.RB.Negative ~ sex, data = main_data)
+wilcox.test(Mean.LIWC.Posemo ~ sex, data = main_data)
+wilcox.test(Mean.LIWC.Negemo ~ sex, data = main_data)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.LIWC.Posemo, na.rm = TRUE),
+  iqr = IQR(Mean.LIWC.Posemo, na.rm = TRUE)
+)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.LIWC.Negemo, na.rm = TRUE),
+  iqr = IQR(Mean.LIWC.Negemo, na.rm = TRUE)
+)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.RB.Positive, na.rm = TRUE),
+  iqr = IQR(Mean.RB.Positive, na.rm = TRUE)
+)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.RB.Negative, na.rm = TRUE),
+  iqr = IQR(Mean.RB.Negative, na.rm = TRUE)
+)
+
+
+### --- Feedback Received (Likes, Replies, RTs, Quotes) --- ###
+
+wilcox.test(Mean.Like.Count ~ sex, data = main_data)
+wilcox.test(Mean.Reply.Count ~ sex, data = main_data)
+wilcox.test(Mean.Retweet.Count ~ sex, data = main_data)
+wilcox.test(Mean.Quote.Count ~ sex, data = main_data)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.Like.Count, na.rm = TRUE),
+  iqr = IQR(Mean.Like.Count, na.rm = TRUE)
+)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.Retweet.Count, na.rm = TRUE),
+  iqr = IQR(Mean.Retweet.Count, na.rm = TRUE)
+)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.Reply.Count, na.rm = TRUE),
+  iqr = IQR(Mean.Reply.Count, na.rm = TRUE)
+)
+
+main_data %>% group_by(sex) %>% summarise(
+  median = median(Mean.Quote.Count, na.rm = TRUE),
+  iqr = IQR(Mean.Quote.Count, na.rm = TRUE)
+)
+
+
+### --- Timing of Tweet Posting --- ###
+
+
+male   <- subset(main_data, sex == "Male")
+female <- subset(main_data, sex == "Female")
+
+m <- circular(male$Mean.Angle)
+f <- circular(female$Mean.Angle)
+
+(mean.circular(m) + 2 * pi) / (2 * pi) * 24
+sd.circular(m)
+
+(mean.circular(f) + 2 * pi) / (2 * pi) * 24
+sd.circular(f)
+
+# Combined dataset
+cdat <- c(m, f)
+ndat <- c(length(m), length(f))
+g <- 2
+
+# Common distribution test
+CSUScores <- CosSinUniScores(cdat)
+WgObs <- WgVal(CSUScores, ndat, g)
+pchisq(WgObs, df = 2 * (g - 1), lower.tail = FALSE)
+
+# Common mean direction test
+YgObs <- YgVal(cdat, ndat, g)
+pchisq(YgObs, df = g - 1, lower.tail = FALSE)
+
+# Convert mean angle → clock hour
+main_data$Mean.Hour <- main_data$Mean.Angle / (2 * pi) * 24
+
+sex_ma <- ggplot(main_data, aes(x = Mean.Hour, color = sex)) +
+  geom_density(linewidth = 1.2, fill = NA) +
+  labs(
+    x = "Mean Hour of Tweet Posting",
+    y = "Density",
+    title = "Distribution of Tweet Posting Times by Sex"
+  ) +
+  theme_bw() +
+  scale_color_manual(values = c("blue", "red"), name = "Sex") +
+  scale_x_continuous(breaks = seq(0, 24, by = 2))
+
+sex_ma
