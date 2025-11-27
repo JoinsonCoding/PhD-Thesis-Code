@@ -300,3 +300,811 @@ def final_generation(df, df_noRT, name):
 
     final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
 
+final_generation(main_data, main_rt, 'main_df')
+
+
+
+#Timing of Tweets
+
+id_list = np.array(tl_df['linker'].unique())
+
+pl_1w = tl_df.loc[(tl_df['survey_1'] == "sent in 2 week window")]
+pl_2w = tl_df.loc[(tl_df['survey_2'] == "sent in 2 week window")]
+pl_4w = tl_df.loc[(tl_df['survey_4'] == "sent in 2 week window")]
+pl_5w = tl_df.loc[(tl_df['survey_5'] == "sent in 2 week window")]
+pl_6w = tl_df.loc[(tl_df['survey_6'] == "sent in 2 week window")]
+
+#This function uses the functions above to generate a participant-level dataset
+
+def final_generation(df, name):
+    
+    data_gen(df, 'final_df')
+    global final_df
+    final_df = final_df[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
+
+    # Generating total tweets variables
+    final_df['total_tweets'] = final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6] + final_df[7] + final_df[8] + + final_df[9] + + final_df[10] + final_df[11]+ final_df[12]+ final_df[13]+ final_df[14]+ final_df[15]+ final_df[16]+ final_df[17]+ final_df[18]+ final_df[19]+ final_df[20]+ final_df[21] + final_df[22] + final_df[23]  
+
+    #Generating row_num column, referring the row number of each of the dataframe's row
+    final_df['row_num'] = np.arange(len(final_df))
+    final_df['row_num']
+
+    #Circular Mean Generation
+
+    mean_ang = []
+    circ_mean_round(final_df, mean_ang, res_leng, sample_var, standard_dev)
+
+    #A new column is added referring to the mean angle for each participant. 
+
+    final_df['Mean Angle'] = mean_ang
+    final_df
+
+    #Merging participant level Twitter dataset to ALSPAC survey dataset
+
+    link = final_df[['linker','Mean Angle', 'total_tweets']]
+    final_d = surv.merge(final_df)
+    final_d = final_d.sort_values(by=['row_num'])
+    
+    final_d['aln'] = final_d['aln'].astype(str)
+    final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
+    
+    final_d['generation'] = None
+    final_d.loc[(final_d['qlet'] == 'A') | (final_d['qlet'] == 'B'), 'generation'] = 'G1'
+    final_d.loc[(final_d['qlet'] == 'P') | (final_d['qlet'] == 'M'), 'generation'] = 'G0'
+
+    final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
+
+final_generation(pl_1w, "pl_1w") #Two weeks before COVID1
+final_generation(pl_2w, "pl_2w") #Two weeks before COVID2
+final_generation(pl_4w, "pl_4w") #Two weeks before COVID4
+final_generation(pl_5w, "pl_5w") #Two weeks before COVID5
+final_generation(pl_6w, "pl_6w") #Two weeks before COVID6
+
+
+#All Tweets
+c1 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\pl_1w.csv")
+c2 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\pl_2w.csv")
+c4 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\pl_4w.csv")
+c5 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\pl_5w.csv")
+c6 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\pl_6w.csv")
+
+c1['Mean Hour'] = c1['Mean Angle'] / (2*math.pi) * 24
+c2['Mean Hour'] = c2['Mean Angle'] / (2*math.pi) * 24
+c4['Mean Hour'] = c4['Mean Angle'] / (2*math.pi) * 24
+c5['Mean Hour'] = c5['Mean Angle'] / (2*math.pi) * 24
+c6['Mean Hour'] = c6['Mean Angle'] / (2*math.pi) * 24
+
+c1['Q'] = 1
+c2['Q'] = 2
+c4['Q'] = 4
+c5['Q'] = 5
+c6['Q'] = 6
+
+c1['aln'] = c1['aln'].astype(str)
+c1['linker'] = c1['aln'] + ' ' + c1['qlet']
+
+c2['aln'] = c2['aln'].astype(str)
+c2['linker'] = c2['aln'] + ' ' + c2['qlet']
+
+c4['aln'] = c4['aln'].astype(str)
+c4['linker'] = c4['aln'] + ' ' + c4['qlet']
+
+c5['aln'] = c5['aln'].astype(str)
+c5['linker'] = c5['aln'] + ' ' + c5['qlet']
+
+c6['aln'] = c6['aln'].astype(str)
+c6['linker'] = c6['aln'] + ' ' + c6['qlet']
+
+c1 = c1.rename(columns = {'COVID1_mfq_cont': 'smfq_score', 'COVID1_gad_cont': 'gad_score', 'COVID1_wemwbs_cont': 'wemwbs_score'})
+c2 = c2.rename(columns = {'COVID2_mfq_cont': 'smfq_score', 'COVID2_gad_cont': 'gad_score', 'COVID2_wemwbs_cont': 'wemwbs_score'})
+c4 = c4.rename(columns = {'COVID4_mfq_cont': 'smfq_score', 'COVID4_gad_cont': 'gad_score', 'COVID4_wemwbs_cont': 'wemwbs_score'})
+c5 = c5.rename(columns = {'COVID5_mfq_cont': 'smfq_score', 'COVID5_gad_cont': 'gad_score'})
+c6 = c6.rename(columns = {'COVID6_mfq_cont': 'smfq_score', 'COVID6_gad_cont': 'gad_score', 'COVID6_wemwbs_cont': 'wemwbs_score'})
+
+all_c = pd.concat([c1,c2,c4,c5,c6], ignore_index=True)
+
+
+
+# CHAPTER 4:
+
+tl_df = tl_df.loc[tl_df['tweet_voided'] != 33.0]
+
+int_c1 = int_df.loc[int_df['survey_1'] == "sent in 2 week window"]
+int_c2 = int_df.loc[int_df['survey_2'] == "sent in 2 week window"]
+int_c4 = int_df.loc[int_df['survey_4'] == "sent in 2 week window"]
+int_c5 = int_df.loc[int_df['survey_5'] == "sent in 2 week window"]
+int_c6 = int_df.loc[int_df['survey_6'] == "sent in 2 week window"]
+
+def final_generation_all(all_d, name):
+    
+    df_1 = all_d.loc[(all_d['is_re_tweet']!= 1.0) & (all_d['contains_mention']!= 1.0)]
+    data_gen(df_1, 'df_noRT')
+    global df_noRT
+    df_noRT = df_noRT[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
+    # Generating total tweets variables
+    df_noRT['total_nt'] = df_noRT[0] + df_noRT[1] + df_noRT[2] + df_noRT[3] + df_noRT[4] + df_noRT[5] + df_noRT[6] + df_noRT[7] + df_noRT[8] + df_noRT[9] +  df_noRT[10] + df_noRT[11]+ df_noRT[12]+ df_noRT[13]+ df_noRT[14]+ df_noRT[15]+ df_noRT[16]+ df_noRT[17]+ df_noRT[18]+ df_noRT[19]+ df_noRT[20]+ df_noRT[21] + df_noRT[22] + df_noRT[23]  
+    #Generating row_num column, referring the row number of each of the dataframe's row
+    #df_noRT['row_num'] = np.arange(len(df_noRT))
+    
+    df_2 = all_d.loc[(all_d['is_re_tweet']== 1.0)]
+    data_gen(df_2, 'df_RT')
+    global df_RT
+    df_RT = df_RT[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
+    # Generating total tweets variables
+    df_RT['total_rt'] = df_RT[0] + df_RT[1] + df_RT[2] + df_RT[3] + df_RT[4] + df_RT[5] + df_RT[6] + df_RT[7] + df_RT[8] + df_RT[9] +  df_RT[10] + df_RT[11]+ df_RT[12]+ df_RT[13]+ df_RT[14]+ df_RT[15]+ df_RT[16]+ df_RT[17]+ df_RT[18]+ df_RT[19]+ df_RT[20]+ df_RT[21] + df_RT[22] + df_RT[23]  
+    #Generating row_num column, referring the row number of each of the dataframe's row
+    #df_RT['row_num'] = np.arange(len(df_RT))                            
+    
+    df_3 = all_d.loc[(all_d['is_re_tweet']!= 1.0) & (all_d['contains_mention']== 1.0)]
+    data_gen(df_3, 'df_rep')
+    global df_rep    
+    df_rep = df_rep[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
+    # Generating total tweets variables
+    df_rep['total_rep'] = df_rep[0] + df_rep[1] + df_rep[2] + df_rep[3] + df_rep[4] + df_rep[5] + df_rep[6] + df_rep[7] + df_rep[8] + df_rep[9] +  df_rep[10] + df_rep[11]+ df_rep[12]+ df_rep[13]+ df_rep[14]+ df_rep[15]+ df_rep[16]+ df_rep[17]+ df_rep[18]+ df_rep[19]+ df_rep[20]+ df_rep[21] + df_rep[22] + df_rep[23]  
+    #Generating row_num column, referring the row number of each of the dataframe's row
+    #df_rep['row_num'] = np.arange(len(df_rep))
+    
+    #Merging participant level Twitter dataset to ALSPAC survey dataset
+    #link = df_noRT[['linker', 'total_nt']]
+    final_d = pd.merge(surv_filt, df_noRT, on = 'linker', how = 'outer')
+    #print(final_d['total_nt'])
+    final_d = pd.merge(final_d, df_RT, on = 'linker', how = 'outer')
+    #print(final_d[['total_nt', 'total_rt']])
+    final_d = pd.merge(final_d, df_rep, on = 'linker', how = 'outer')
+    #print(final_d)
+    #final_d = final_d.sort_values(by=['row_num'])
+    
+    final_d['aln'] = final_d['aln'].astype(str)
+    final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
+    
+    final_d['generation'] = None
+    final_d.loc[(final_d['qlet'] == 'A') | (final_d['qlet'] == 'B'), 'generation'] = 'G1'
+    final_d.loc[(final_d['qlet'] == 'P') | (final_d['qlet'] == 'M'), 'generation'] = 'G0'
+    
+    final_d['total_nt'] = final_d['total_nt'].fillna(0)
+    final_d['total_rt'] = final_d['total_rt'].fillna(0)
+    final_d['total_rep'] = final_d['total_rep'].fillna(0)
+    final_d['total_tweets'] = final_d['total_nt'] + final_d['total_rt'] + final_d['total_rep']
+    final_d['prop_nt'] = final_d['total_nt'] / final_d['total_tweets'] 
+    final_d['prop_rt'] = final_d['total_rt'] / final_d['total_tweets'] 
+    final_d['prop_rep'] = final_d['total_rep'] / final_d['total_tweets'] 
+    final_d['active_compound'] = (final_d['prop_nt'] * -1) + ((final_d['prop_rt'] + final_d['prop_rep'])*1)
+
+
+    #Feedback on original Tweets
+    
+    df_noRT = all_d.loc[all_d['contains_mention'] != 1.0]
+    
+    likecount_df = df_noRT.groupby('linker')['public_metricslike_count'].sum().reset_index()
+    likecount_df.rename(columns = {'public_metricslike_count': 'Like Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, likecount_df, on = 'linker', how = 'outer')
+    final_d['Like Count NT'] = final_d['Like Count NT'].fillna(0)
+
+    rtcount_df = df_noRT.groupby('linker')['public_metricsretweet_count'].sum().reset_index()
+    rtcount_df.rename(columns = {'public_metricsretweet_count': 'Retweet Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, rtcount_df, on = 'linker', how = 'outer')
+    final_d['Retweet Count NT'] = final_d['Retweet Count NT'].fillna(0)
+
+    qtcount_df = df_noRT.groupby('linker')['public_metricsquote_count'].sum().reset_index()
+    qtcount_df.rename(columns = {'public_metricsquote_count': 'Quote Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, qtcount_df, on = 'linker', how = 'outer')
+    final_d['Quote Count NT'] = final_d['Quote Count NT'].fillna(0)
+
+    replycount_df = df_noRT.groupby('linker')['public_metricsreply_count'].sum().reset_index()
+    replycount_df.rename(columns = {'public_metricsreply_count': 'Reply Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, replycount_df, on = 'linker', how = 'outer')
+    final_d['Reply Count NT'] = final_d['Reply Count NT'].fillna(0)
+    
+    likemed_df = df_noRT.groupby('linker')['public_metricslike_count'].median().reset_index()
+    likemed_df.rename(columns = {'public_metricslike_count': 'Median Like Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, likemed_df, on = 'linker', how = 'outer')
+    final_d['Median Like Count NT'] = final_d['Median Like Count NT'].fillna(0)
+
+    rtmed_df = df_noRT.groupby('linker')['public_metricsretweet_count'].median().reset_index()
+    rtmed_df.rename(columns = {'public_metricsretweet_count': 'Median Retweet Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, rtmed_df, on = 'linker', how = 'outer')
+    final_d['Median Retweet Count NT'] = final_d['Median Retweet Count NT'].fillna(0)
+
+    qtmed_df = df_noRT.groupby('linker')['public_metricsquote_count'].median().reset_index()
+    qtmed_df.rename(columns = {'public_metricsquote_count': 'Median Quote Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, qtmed_df, on = 'linker', how = 'outer')
+    final_d['Median Quote Count NT'] = final_d['Median Quote Count NT'].fillna(0)
+
+    replymed_df = df_noRT.groupby('linker')['public_metricsreply_count'].median().reset_index()
+    replymed_df.rename(columns = {'public_metricsreply_count': 'Median Reply Count NT'}, inplace=True)
+    final_d = pd.merge(final_d, replymed_df, on = 'linker', how = 'outer')
+    final_d['Median Reply Count NT'] = final_d['Median Reply Count NT'].fillna(0)
+
+    
+    #Feedback on Reply Tweets
+    
+    df_noRT = all_d.loc[all_d['Only@Tweet'] != 1.0]
+    
+    likecount_df = df_noRT.groupby('linker')['public_metricslike_count'].sum().reset_index()
+    likecount_df.rename(columns = {'public_metricslike_count': 'Like Count T'}, inplace=True)
+    final_d = pd.merge(final_d, likecount_df, on = 'linker', how = 'outer')
+    final_d['Like Count T'] = final_d['Like Count T'].fillna(0)
+
+    rtcount_df = df_noRT.groupby('linker')['public_metricsretweet_count'].sum().reset_index()
+    rtcount_df.rename(columns = {'public_metricsretweet_count': 'Retweet Count T'}, inplace=True)
+    final_d = pd.merge(final_d, rtcount_df, on = 'linker', how = 'outer')
+    final_d['Retweet Count T'] = final_d['Retweet Count T'].fillna(0)
+
+    qtcount_df = df_noRT.groupby('linker')['public_metricsquote_count'].sum().reset_index()
+    qtcount_df.rename(columns = {'public_metricsquote_count': 'Quote Count T'}, inplace=True)
+    final_d = pd.merge(final_d, qtcount_df, on = 'linker', how = 'outer')
+    final_d['Quote Count T'] = final_d['Quote Count T'].fillna(0)
+
+    replycount_df = df_noRT.groupby('linker')['public_metricsreply_count'].sum().reset_index()
+    replycount_df.rename(columns = {'public_metricsreply_count': 'Reply Count T'}, inplace=True)
+    final_d = pd.merge(final_d, replycount_df, on = 'linker', how = 'outer')
+    final_d['Reply Count T'] = final_d['Reply Count T'].fillna(0)
+    
+    likemed_df = df_noRT.groupby('linker')['public_metricslike_count'].median().reset_index()
+    likemed_df.rename(columns = {'public_metricslike_count': 'Median Like Count T'}, inplace=True)
+    final_d = pd.merge(final_d, likemed_df, on = 'linker', how = 'outer')
+    final_d['Median Like Count T'] = final_d['Median Like Count T'].fillna(0)
+
+    rtmed_df = df_noRT.groupby('linker')['public_metricsretweet_count'].median().reset_index()
+    rtmed_df.rename(columns = {'public_metricsretweet_count': 'Median Retweet Count T'}, inplace=True)
+    final_d = pd.merge(final_d, rtmed_df, on = 'linker', how = 'outer')
+    final_d['Median Retweet Count T'] = final_d['Median Retweet Count T'].fillna(0)
+
+    qtmed_df = df_noRT.groupby('linker')['public_metricsquote_count'].median().reset_index()
+    qtmed_df.rename(columns = {'public_metricsquote_count': 'Median Quote Count T'}, inplace=True)
+    final_d = pd.merge(final_d, qtmed_df, on = 'linker', how = 'outer')
+    final_d['Median Quote Count T'] = final_d['Median Quote Count T'].fillna(0)
+
+    replymed_df = df_noRT.groupby('linker')['public_metricsreply_count'].median().reset_index()
+    replymed_df.rename(columns = {'public_metricsreply_count': 'Median Reply Count T'}, inplace=True)
+    final_d = pd.merge(final_d, replymed_df, on = 'linker', how = 'outer')
+    final_d['Median Reply Count T'] = final_d['Median Reply Count T'].fillna(0)
+    
+    #Feedback on All Tweets
+    
+    df_noRT = all_d.loc[all_d['is_re_tweet'] != 1.0]
+    
+    likecount_df = df_noRT.groupby('linker')['public_metricslike_count'].sum().reset_index()
+    likecount_df.rename(columns = {'public_metricslike_count': 'Like Count'}, inplace=True)
+    final_d = pd.merge(final_d, likecount_df, on = 'linker', how = 'outer')
+    final_d['Like Count'] = final_d['Like Count'].fillna(0)
+
+    rtcount_df = df_noRT.groupby('linker')['public_metricsretweet_count'].sum().reset_index()
+    rtcount_df.rename(columns = {'public_metricsretweet_count': 'Retweet Count'}, inplace=True)
+    final_d = pd.merge(final_d, rtcount_df, on = 'linker', how = 'outer')
+    final_d['Retweet Count'] = final_d['Retweet Count'].fillna(0)
+
+    qtcount_df = df_noRT.groupby('linker')['public_metricsquote_count'].sum().reset_index()
+    qtcount_df.rename(columns = {'public_metricsquote_count': 'Quote Count'}, inplace=True)
+    final_d = pd.merge(final_d, qtcount_df, on = 'linker', how = 'outer')
+    final_d['Quote Count'] = final_d['Quote Count'].fillna(0)
+
+    replycount_df = df_noRT.groupby('linker')['public_metricsreply_count'].sum().reset_index()
+    replycount_df.rename(columns = {'public_metricsreply_count': 'Reply Count'}, inplace=True)
+    final_d = pd.merge(final_d, replycount_df, on = 'linker', how = 'outer')
+    final_d['Reply Count'] = final_d['Reply Count'].fillna(0)
+    
+    
+    likecount_df = df_noRT.groupby('linker')['public_metricslike_count'].mean().reset_index()
+    likecount_df.rename(columns = {'public_metricslike_count': 'Mean Like Count'}, inplace=True)
+    final_d = pd.merge(final_d, likecount_df, on = 'linker', how = 'outer')
+    final_d['Mean Like Count'] = final_d['Mean Like Count'].fillna(0)
+
+    rtcount_df = df_noRT.groupby('linker')['public_metricsretweet_count'].mean().reset_index()
+    rtcount_df.rename(columns = {'public_metricsretweet_count': 'Mean Retweet Count'}, inplace=True)
+    final_d = pd.merge(final_d, rtcount_df, on = 'linker', how = 'outer')
+    final_d['Mean Retweet Count'] = final_d['Mean Retweet Count'].fillna(0)
+
+    qtcount_df = df_noRT.groupby('linker')['public_metricsquote_count'].mean().reset_index()
+    qtcount_df.rename(columns = {'public_metricsquote_count': 'Mean Quote Count'}, inplace=True)
+    final_d = pd.merge(final_d, qtcount_df, on = 'linker', how = 'outer')
+    final_d['Mean Quote Count'] = final_d['Mean Quote Count'].fillna(0)
+
+    replycount_df = df_noRT.groupby('linker')['public_metricsreply_count'].mean().reset_index()
+    replycount_df.rename(columns = {'public_metricsreply_count': 'Mean Reply Count'}, inplace=True)
+    final_d = pd.merge(final_d, replycount_df, on = 'linker', how = 'outer')
+    final_d['Mean Reply Count'] = final_d['Mean Reply Count'].fillna(0)
+    
+    likemed_df = df_noRT.groupby('linker')['public_metricslike_count'].median().reset_index()
+    likemed_df.rename(columns = {'public_metricslike_count': 'Median Like Count'}, inplace=True)
+    final_d = pd.merge(final_d, likemed_df, on = 'linker', how = 'outer')
+    final_d['Median Like Count'] = final_d['Median Like Count'].fillna(0)
+
+    rtmed_df = df_noRT.groupby('linker')['public_metricsretweet_count'].median().reset_index()
+    rtmed_df.rename(columns = {'public_metricsretweet_count': 'Median Retweet Count'}, inplace=True)
+    final_d = pd.merge(final_d, rtmed_df, on = 'linker', how = 'outer')
+    final_d['Median Retweet Count'] = final_d['Median Retweet Count'].fillna(0)
+
+    qtmed_df = df_noRT.groupby('linker')['public_metricsquote_count'].median().reset_index()
+    qtmed_df.rename(columns = {'public_metricsquote_count': 'Median Quote Count'}, inplace=True)
+    final_d = pd.merge(final_d, qtmed_df, on = 'linker', how = 'outer')
+    final_d['Median Quote Count'] = final_d['Median Quote Count'].fillna(0)
+
+    replymed_df = df_noRT.groupby('linker')['public_metricsreply_count'].median().reset_index()
+    replymed_df.rename(columns = {'public_metricsreply_count': 'Median Reply Count'}, inplace=True)
+    final_d = pd.merge(final_d, replymed_df, on = 'linker', how = 'outer')
+    final_d['Median Reply Count'] = final_d['Median Reply Count'].fillna(0)
+    
+    #Sentiment
+    
+    df_noRT = all_d.loc[all_d['contains_mention'] != 1.0]
+    rb_df = df_noRT.groupby('linker')['rbnegative'].mean().reset_index()
+    rb_df.rename(columns = {'rbnegative': 'Mean RB Negative Score NT'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df, on = 'linker', how = 'outer')
+    
+    df_noRT = all_d.loc[all_d['Only@Tweet'] == 1.0]
+    rb_df = df_noRT.groupby('linker')['rbnegative'].mean().reset_index()
+    rb_df.rename(columns = {'rbnegative': 'Mean RB Negative Score T'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df, on = 'linker', how = 'outer')
+    
+    df_noRT = all_d.loc[all_d['is_re_tweet'] != 1.0]
+    rb_df = df_noRT.groupby('linker')['rbnegative'].mean().reset_index()
+    rb_df.rename(columns = {'rbnegative': 'Mean RB Negative Score'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df, on = 'linker', how = 'outer')
+    
+    df_noRT = all_d.loc[all_d['contains_mention'] != 1.0]
+    rb_df = df_noRT.groupby('linker')['rbpositive'].mean().reset_index()
+    rb_df.rename(columns = {'rbpositive': 'Mean RB Positive Score NT'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df, on = 'linker', how = 'outer')
+    
+    df_noRT = all_d.loc[all_d['Only@Tweet'] == 1.0]
+    rb_df = df_noRT.groupby('linker')['rbpositive'].mean().reset_index()
+    rb_df.rename(columns = {'rbpositive': 'Mean RB Positive Score T'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df, on = 'linker', how = 'outer')
+    
+    df_noRT = all_d.loc[all_d['is_re_tweet'] != 1.0]
+    rb_df = df_noRT.groupby('linker')['rbpositive'].mean().reset_index()
+    rb_df.rename(columns = {'rbpositive': 'Mean RB Positive Score'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df, on = 'linker', how = 'outer')
+    
+    print(final_d[['total_tweets', 'total_rt', 'total_nt', 'total_rep']])
+
+    final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
+
+
+final_generation_all(int_c1, 'int_c1')
+final_generation_all(int_c2, 'int_c2')
+final_generation_all(int_c4, 'int_c4')
+final_generation_all(int_c5, 'int_c5')
+final_generation_all(int_c6, 'int_c6')
+
+all_c1 = pd.read_csv('C:\\Users\\ta20395\\TD\\Second Harvest Data\\int_c1.csv')
+all_c2 = pd.read_csv('C:\\Users\\ta20395\\TD\\Second Harvest Data\\int_c2.csv')
+all_c4 = pd.read_csv('C:\\Users\\ta20395\\TD\\Second Harvest Data\\int_c4.csv')
+all_c5 = pd.read_csv('C:\\Users\\ta20395\\TD\\Second Harvest Data\\int_c5.csv')
+all_c6 = pd.read_csv('C:\\Users\\ta20395\\TD\\Second Harvest Data\\int_c6.csv')
+
+#All Tweets
+
+all_c1['Q'] = '1'
+all_c2['Q'] = '2'
+all_c4['Q'] = '4'
+all_c5['Q'] = '5'
+all_c6['Q'] = '6'
+
+all_c1 = all_c1.rename(columns = {'COVID1_mfq_cont': 'smfq_score', 'COVID1_gad_cont': 'gad_score', 'COVID1_wemwbs_cont': 'wemwbs_score'})
+all_c2 = all_c2.rename(columns = {'COVID2_mfq_cont': 'smfq_score', 'COVID2_gad_cont': 'gad_score', 'COVID2_wemwbs_cont': 'wemwbs_score'})
+all_c4 = all_c4.rename(columns = {'COVID4_mfq_cont': 'smfq_score', 'COVID4_gad_cont': 'gad_score', 'COVID4_wemwbs_cont': 'wemwbs_score'})
+all_c5 = all_c5.rename(columns = {'COVID5_mfq_cont': 'smfq_score', 'COVID5_gad_cont': 'gad_score'})
+all_c6 = all_c6.rename(columns = {'COVID6_mfq_cont': 'smfq_score', 'COVID6_gad_cont': 'gad_score', 'COVID6_wemwbs_cont': 'wemwbs_score'})
+
+all_c = pd.concat([all_c1,all_c2, all_c4, all_c5, all_c6], ignore_index=True)
+all_c = all_c.loc[all_c['total_tweets'] >= 1]
+
+all_c.to_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_active.csv")
+
+
+
+
+
+
+
+
+
+#Chapter 6:
+
+
+tl_df['C1_range'] = (tl_df['date_column'] >= tl_df['COVID1_1y']) & (tl_df['date_column'] <= tl_df['COVID1_complete'])
+tl_df['C6_range'] = (tl_df['date_column'] >= tl_df['COVID6_1y']) & (tl_df['date_column'] <= tl_df['COVID6_complete'])
+
+#Removing retweets from the dataset (change this to 1.0 if retweets included)
+tl_df = tl_df.loc[tl_df['is_re_tweet'] != 1.0]
+tl_df = tl_df.loc[tl_df['tweet_voided'] != 33.0]
+
+df_c1 = tl_df.loc[tl_df['C1_range'] == True]
+df_c6 = tl_df.loc[tl_df['C6_range'] == True]
+
+def final_generation(df, name):
+
+    data_gen(df, 'final_df')
+    global final_df
+    final_df = final_df[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
+    # Generating total tweets variables
+    final_df['total_tweets'] = final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6] + final_df[7] + final_df[8] + + final_df[9] + + final_df[10] + final_df[11]+ final_df[12]+ final_df[13]+ final_df[14]+ final_df[15]+ final_df[16]+ final_df[17]+ final_df[18]+ final_df[19]+ final_df[20]+ final_df[21] + final_df[22] + final_df[23]  
+
+    #Generating row_num column, referring the row number of each of the dataframe's row
+    final_df['row_num'] = np.arange(len(final_df))
+    final_df['row_num']
+    
+    #Merging participant level Twitter dataset to ALSPAC survey dataset
+
+    link = final_df[['linker', 'total_tweets']]
+    final_d = surv.merge(final_df)
+    final_d = final_d.sort_values(by=['row_num'])
+    
+    liwc_df = df.groupby('linker')['liwccompound'].mean().reset_index()
+    liwc_df.rename(columns = {'liwccompound': 'Mean LIWC Compound Score'}, inplace=True)
+    final_d = pd.merge(final_d, liwc_df)
+    
+    liwcs_df = df.groupby('linker')['liwccompound'].std().reset_index()
+    liwcs_df.rename(columns = {'liwccompound': 'Std LIWC Compound Score'}, inplace=True)
+    final_d = pd.merge(final_d, liwcs_df)
+    
+    df['epicosmliwcnegemo'] = df['epicosmliwcnegemo'].fillna(0)
+    neg_df = df.groupby('linker')['epicosmliwcnegemo'].mean().reset_index()
+    neg_df.rename(columns = {'epicosmliwcnegemo': 'Mean Negemo Score'}, inplace=True)
+    final_d = pd.merge(final_d, neg_df)
+    
+    df['epicosmliwcposemo'] = df['epicosmliwcposemo'].fillna(0)
+    pos_df = df.groupby('linker')['epicosmliwcposemo'].mean().reset_index()
+  pos_df.rename(columns = {'epicosmliwcposemo': 'Mean Posemo Score'}, inplace=True)
+    final_d = pd.merge(final_d, pos_df)
+    
+    negs_df = df.groupby('linker')['epicosmliwcnegemo'].std().reset_index()
+    negs_df.rename(columns = {'epicosmliwcnegemo': 'Std Negemo Score'}, inplace=True)
+    final_d = pd.merge(final_d, negs_df)
+    
+    poss_df = df.groupby('linker')['epicosmliwcposemo'].std().reset_index()
+    poss_df.rename(columns = {'epicosmliwcposemo': 'Std Posemo Score'}, inplace=True)
+    final_d = pd.merge(final_d, poss_df)
+    
+    df['epicosmvadernegative'] = df['epicosmvadernegative'].fillna(0)
+    vneg_df = df.groupby('linker')['epicosmvadernegative'].mean().reset_index()
+    vneg_df.rename(columns = {'epicosmvadernegative': 'Mean VADER Negative Score'}, inplace=True)
+    final_d = pd.merge(final_d, vneg_df)
+    
+    df['epicosmvaderpositive'] = df['epicosmvaderpositive'].fillna(0)
+    vpos_df = df.groupby('linker')['epicosmvaderpositive'].mean().reset_index()
+    vpos_df.rename(columns = {'epicosmvaderpositive': 'Mean VADER Positive Score'}, inplace=True)
+    final_d = pd.merge(final_d, vpos_df)
+    
+    vnegs_df = df.groupby('linker')['epicosmvadernegative'].std().reset_index()
+    vnegs_df.rename(columns = {'epicosmvadernegative': 'Std VADER Negative Score'}, inplace=True)
+    final_d = pd.merge(final_d, vnegs_df)
+    
+    vposs_df = df.groupby('linker')['epicosmvaderpositive'].std().reset_index()
+    vposs_df.rename(columns = {'epicosmvaderpositive': 'Std VADER Positive Score'}, inplace=True)
+    final_d = pd.merge(final_d, vposs_df)
+    
+    #df['epicosmvadercompound'] = df['epicosmvadercompound'].fillna(0)
+    vcom_df = df.groupby('linker')['epicosmvadercompound'].mean().reset_index()
+    vcom_df.rename(columns = {'epicosmvadercompound': 'Mean VADER Compound Score'}, inplace=True)
+    final_d = pd.merge(final_d, vcom_df)
+    
+    vcoms_df = df.groupby('linker')['epicosmvadercompound'].std().reset_index()
+    vcoms_df.rename(columns = {'epicosmvadercompound': 'Std VADER Compound Score'}, inplace=True)
+    final_d = pd.merge(final_d, vcoms_df)
+    
+    rb_df = df.groupby('linker')['rbcompound'].mean().reset_index()
+    rb_df.rename(columns = {'rbcompound': 'Mean RB Compound Score'}, inplace=True)
+    final_d = pd.merge(final_d, rb_df)
+    
+    rbs_df = df.groupby('linker')['rbcompound'].std().reset_index()
+    rbs_df.rename(columns = {'rbcompound': 'Std RB Compound Score'}, inplace=True)
+    final_d = pd.merge(final_d, rbs_df)
+    
+    rpos_df = df.groupby('linker')['rbpositive'].mean().reset_index()
+    rpos_df.rename(columns = {'rbpositive': 'Mean RB Positive'}, inplace=True)
+    final_d = pd.merge(final_d, rpos_df)
+    
+    rposs_df = df.groupby('linker')['rbpositive'].std().reset_index()
+    rposs_df.rename(columns = {'rbpositive': 'Std RB Positive'}, inplace=True)
+    final_d = pd.merge(final_d, rposs_df)
+    
+    rneg_df = df.groupby('linker')['rbnegative'].mean().reset_index()
+    rneg_df.rename(columns = {'rbnegative': 'Mean RB Negative'}, inplace=True)
+    final_d = pd.merge(final_d, rneg_df)
+    
+    rnegs_df = df.groupby('linker')['rbnegative'].std().reset_index()
+    rnegs_df.rename(columns = {'rbnegative': 'Std RB Negative'}, inplace=True)
+    final_d = pd.merge(final_d, rnegs_df)
+    
+    rneu_df = df.groupby('linker')['rbneutral'].mean().reset_index()
+    rneu_df.rename(columns = {'rbneutral': 'Mean RB Neutral'}, inplace=True)
+    final_d = pd.merge(final_d, rneu_df)
+    
+    rneus_df = df.groupby('linker')['rbneutral'].std().reset_index()
+    rneus_df.rename(columns = {'rbneutral': 'Std RB Neutral'}, inplace=True)
+    final_d = pd.merge(final_d, rneus_df)
+    
+    final_d['aln'] = final_d['aln'].astype(str)
+    final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
+    
+    final_d['generation'] = None
+    final_d.loc[(final_d['qlet'] == 'A') | (final_d['qlet'] == 'B'), 'generation'] = 'G1'
+    final_d.loc[(final_d['qlet'] == 'P') | (final_d['qlet'] == 'M'), 'generation'] = 'G0'
+
+    print(final_d)
+
+    final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
+
+
+no_gap = []
+
+def calculate_mssd(df, sentiment):
+    df = df.sort_values(by='date').copy()
+    df['hour_group'] = df['date'].dt.floor('h')  # lowercase 'h' fixes the FutureWarning
+    df['n_in_hour'] = df.groupby('hour_group')['hour_group'].transform('count')
+
+    adjusted_dates = []
+    for _, group in df.groupby('hour_group', sort=False):
+        n = len(group)
+        if n == 1:
+            adjusted_dates.extend(group['date'])
+        else:
+            interval = timedelta(seconds=int(3600 / n))
+            start_time = group['hour_group'].iloc[0]
+            fake_times = [start_time + i * interval for i in range(n)]
+            adjusted_dates.extend(fake_times)
+    df['adjusted_date'] = adjusted_dates
+
+    df = df.groupby('adjusted_date', as_index=False)[sentiment].mean()
+    df = df.rename(columns={'adjusted_date': 'date'})
+
+    df['time_diff'] = df['date'].diff()
+    df['time_diff_float'] = df['time_diff'].dt.days * 24 + df['time_diff'].dt.seconds / 3600
+
+    gap = len(df.loc[df['time_diff_float'] == 0.0])
+    no_gap.append(gap)
+    df['time_diff_float'] = df['time_diff_float'].replace(0.0, 0.01)
+
+    df['consecutive_sentiments_diff'] = ((df[sentiment] - df[sentiment].shift(1))**2) / df['time_diff_float']
+
+    if len(df) > 1:
+        median_time_diff = df['time_diff_float'].median()
+        mssd_time_adjusted = df['consecutive_sentiments_diff'].sum() * (median_time_diff / (len(df) - 1))
+    else:
+        mssd_time_adjusted = np.nan
+
+    # Return BOTH for debugging
+    return mssd_time_adjusted, df
+
+def apply_mssd(var, col_name, list_sent, data, debug=False):
+    """
+    Calculate MSSD for each participant and append results to list_sent.
+    If debug=True, also return a dict of adjusted timestamps for inspection.
+    """
+    debug_data = {}
+
+    for participant_id in data['linker'].unique():
+        participant_data = data[data['linker'] == participant_id]
+
+        try:
+            result = calculate_mssd(participant_data, var)
+            # Handle both possible return types (float or tuple)
+            if isinstance(result, tuple):
+                mssd, df_adj = result
+                if debug:
+                    debug_data[participant_id] = df_adj
+            else:
+                mssd = result
+
+            list_sent.append({'linker': participant_id, col_name: mssd})
+
+        except Exception as e:
+            print(f"⚠️ Error processing participant {participant_id} for {var}: {e}")
+            list_sent.append({'linker': participant_id, col_name: np.nan})
+
+    if debug:
+        return debug_data
+
+
+def mssd_to_df(data, Q, debug=False):
+    """
+    Compute MSSD scores for all sentiment measures for a given dataset.
+    Returns: DataFrame (and optionally debug info with adjusted timestamps)
+    """
+    duplicates_mask = data.duplicated(subset='linker', keep=False)
+    data = data[duplicates_mask]
+
+    if len(data) == 0:
+        print("No valid Tweets")
+        return None
+
+    debug_all = {}
+
+    mssd_scores_rb = []
+    dbg = apply_mssd('rbcompound', 'RB MSSD', mssd_scores_rb, data, debug=debug)
+    if debug: debug_all['rbcompound'] = dbg
+
+    mssd_scores_liwc = []
+    apply_mssd('liwccompound', 'LIWC MSSD', mssd_scores_liwc, data)
+
+    mssd_scores_vader = []
+    apply_mssd('epicosmvadercompound', 'VADER Compound MSSD', mssd_scores_vader, data)
+
+    mssd_scores_vaderp = []
+    apply_mssd('epicosmvaderpositive', 'VP MSSD', mssd_scores_vaderp, data)
+
+    mssd_scores_vadern = []
+    apply_mssd('epicosmvadernegative', 'VN MSSD', mssd_scores_vadern, data)
+
+    mssd_scores_negemo = []
+    apply_mssd('epicosmliwcnegemo', 'Negemo MSSD', mssd_scores_negemo, data)
+
+    mssd_scores_posemo = []
+    apply_mssd('epicosmliwcposemo', 'Posemo MSSD', mssd_scores_posemo, data)
+
+    mssd_scores_neg = []
+    apply_mssd('rbnegative', 'Negative Prob MSSD', mssd_scores_neg, data)
+
+    mssd_scores_pos = []
+    apply_mssd('rbpositive', 'Positive Prob MSSD', mssd_scores_pos, data)
+
+    # Combine all DataFrames
+    dfs = [
+        pd.DataFrame(mssd_scores_rb),
+        pd.DataFrame(mssd_scores_liwc),
+        pd.DataFrame(mssd_scores_vader),
+        pd.DataFrame(mssd_scores_vaderp),
+        pd.DataFrame(mssd_scores_vadern),
+        pd.DataFrame(mssd_scores_negemo),
+        pd.DataFrame(mssd_scores_posemo),
+        pd.DataFrame(mssd_scores_neg),
+        pd.DataFrame(mssd_scores_pos)
+    ]
+
+    df = dfs[0]
+    for d in dfs[1:]:
+        df = pd.merge(df, d, on='linker', how='outer')
+
+    df['Q'] = Q
+
+    if debug:
+        return df, debug_all
+    else:
+        return df
+
+
+#return dataframes
+mssd1 = mssd_to_df(df_c1, '1')
+mssd6 = mssd_to_df(df_c6, '6')
+mssd = pd.concat([mssd1, mssd6])
+print(mssd)
+
+
+final_generation(df_c1, 'df_c1')
+final_generation(df_c6, 'df_c6')
+
+
+#All Tweets
+c1 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\df_c1.csv")
+c6 = pd.read_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\df_c6.csv")
+
+c1['Q'] = '1'
+c6['Q'] = '6'
+
+c1 = c1.rename(columns = {'COVID1_mfq_cont': 'smfq_score', 'COVID1_gad_cont': 'gad_score', 'COVID1_wemwbs_cont': 'wemwbs_score'})
+c6 = c6.rename(columns = {'COVID6_mfq_cont': 'smfq_score', 'COVID6_gad_cont': 'gad_score', 'COVID6_wemwbs_cont': 'wemwbs_score'})
+
+all_c = pd.concat([c1,c6], ignore_index=True)
+all_c = pd.merge(all_c, mssd, how = 'left', on = ['linker', 'Q'])
+print(all_c)
+
+print(len(all_c))
+
+all_c = all_c.loc[all_c['total_tweets'] >= 10]
+all_c.to_csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_sent.csv")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#CHAPTER 8
+
+
+id_list = np.array(pl_df['linker'].unique())
+tl_df = tl_df.loc[(tl_df['tweet_year'] >= 2010) & (tl_df['tweet_year'] <= 2016)]
+
+#This function uses the functions above to generate a participant-level dataset
+
+def final_generation(df, name):
+    
+    data_gen(df, 'final_df')
+    global final_df
+    final_df = final_df[['linker',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]]
+
+    # Generating total tweets variables
+    final_df['total_tweets'] = final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6] + final_df[7] + final_df[8] + + final_df[9] + + final_df[10] + final_df[11]+ final_df[12]+ final_df[13]+ final_df[14]+ final_df[15]+ final_df[16]+ final_df[17]+ final_df[18]+ final_df[19]+ final_df[20]+ final_df[21] + final_df[22] + final_df[23]  
+
+    #Generating row_num column, referring the row number of each of the dataframe's row
+    final_df['row_num'] = np.arange(len(final_df))
+    final_df['row_num']
+    #print(final_df)
+    #print(final_df.iloc[0][0])
+    
+    #Insomnia Index Generation
+    
+    final_df['night'] = final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[21] + final_df[22] + final_df[23]
+    final_df['day'] = final_df[6] + final_df[7] + final_df[8] + final_df[9] + final_df[10] + final_df[11]+ final_df[12]+ final_df[13]+ final_df[14]+ final_df[15]+ final_df[16]+ final_df[17]+ final_df[18]+ final_df[19]+ final_df[20]
+    final_df['Insomnia Index'] = final_df['day']/final_df['total_tweets'] - final_df['night']/final_df['total_tweets']
+    final_df['deep_night'] = (final_df[23] + final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6]) / final_df['total_tweets']
+    final_df['deep_night_N'] = (final_df[0] + final_df[1] + final_df[2] + final_df[3] + final_df[4] + final_df[5])
+    final_df['morning_lunch'] = (final_df[7] + final_df[8] + final_df[9] + final_df[10] + final_df[11] + final_df[12])
+    final_df['lunch_evening'] = (final_df[13] + final_df[14] + final_df[15] + final_df[16] + final_df[17] + final_df[18])
+    final_df['evening_night'] = (final_df[19] + final_df[20] + final_df[21] + final_df[22] + final_df[23] + final_df[0] + final_df[1])
+    final_df['early_morning'] = (final_df[2] + final_df[3] + final_df[4] + final_df[5] + final_df[6])
+
+
+    #Merging participant level Twitter dataset to ALSPAC survey dataset
+
+
+    link = final_df[['linker', 'total_tweets']]
+    final_d = surv.merge(final_df)
+    final_d = final_d.sort_values(by=['row_num'])
+    
+    w_df = df.groupby('linker')['is_re_tweet'].sum().reset_index()
+    w_df.rename(columns = {'is_re_tweet': 'Number of Retweets'}, inplace=True)
+    final_d = pd.merge(final_d, w_df)
+    
+    final_d['Proportion of Retweets'] = final_d['Number of Retweets'] / final_d['total_tweets']
+    
+    df['epicosmliwcanger'] = df['epicosmliwcanger'].fillna(0)
+    ang_df = df.groupby('linker')['epicosmliwcanger'].mean().reset_index()
+    ang_df.rename(columns = {'epicosmliwcanger': 'Mean Anger Score'}, inplace=True)
+    final_d = pd.merge(final_d, ang_df)
+
+    df['epicosmliwcnegemo'] = df['epicosmliwcnegemo'].fillna(0)
+    neg_df = df.groupby('linker')['epicosmliwcnegemo'].mean().reset_index()
+    neg_df.rename(columns = {'epicosmliwcnegemo': 'Mean Negemo Score'}, inplace=True)
+    final_d = pd.merge(final_d, neg_df)
+    
+    df['epicosmliwcposemo'] = df['epicosmliwcposemo'].fillna(0)
+    pos_df = df.groupby('linker')['epicosmliwcposemo'].mean().reset_index()
+    pos_df.rename(columns = {'epicosmliwcposemo': 'Mean Posemo Score'}, inplace=True)
+    final_d = pd.merge(final_d, pos_df)
+    
+    df['epicosmvadernegative'] = df['epicosmvadernegative'].fillna(0)
+    vneg_df = df.groupby('linker')['epicosmvadernegative'].mean().reset_index()
+    vneg_df.rename(columns = {'epicosmvadernegative': 'Mean VADER Negative Score'}, inplace=True)
+    final_d = pd.merge(final_d, vneg_df)
+    
+    df['epicosmvaderpositive'] = df['epicosmvaderpositive'].fillna(0)
+    vpos_df = df.groupby('linker')['epicosmvaderpositive'].mean().reset_index()
+    vpos_df.rename(columns = {'epicosmvaderpositive': 'Mean VADER Positive Score'}, inplace=True)
+    final_d = pd.merge(final_d, vpos_df)
+    
+    #df['epicosmvadercompound'] = df['epicosmvadercompound'].fillna(0)
+    vcom_df = df.groupby('linker')['epicosmvadercompound'].mean().reset_index()
+    vcom_df.rename(columns = {'epicosmvadercompound': 'Mean VADER Compound Score'}, inplace=True)
+   final_d = pd.merge(final_d, vcom_df)
+    
+    rneg_df = df.groupby('linker')['rbnegative'].mean().reset_index()
+    rneg_df.rename(columns = {'rbnegative': 'Mean RB Negative'}, inplace=True)
+    final_d = pd.merge(final_d, rneg_df)
+
+    
+    final_d['aln'] = final_d['aln'].astype(str)
+    final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
+    
+    final_d['generation'] = None
+    final_d.loc[(final_d['qlet'] == 'A') | (final_d['qlet'] == 'B'), 'generation'] = 'G1'
+    final_d.loc[(final_d['qlet'] == 'P') | (final_d['qlet'] == 'M'), 'generation'] = 'G0'
+
+    
+    print(final_d)
+
+    final_d.to_csv(f'C:\\Users\\ta20395\\TD\\Second Harvest Data\\{name}.csv')
+
+
+final_generation(tl_df, 'med_tweets')
