@@ -8,9 +8,11 @@ library(mice)
 
 # ===============================
 # LOAD DATA
+# Data is med_data, which is 
+# built using all Tweets posted between
+# 2010 and 2016
 # ===============================
-med_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\med_tweets.csv")
-freq_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\freq_df.csv")
+
 
 # ===============================
 # CLEANING DEMOGRAPHIC VARIABLES
@@ -112,10 +114,6 @@ medimpdata <- complete(medimp, 1)
 
 # ===============================
 # MEDIATION MODELS
-# -------------------------------
-# Each section has 3 mediators: passive_index, deep_night, Mean.RB.Negative
-# Outcomes: MFQ, Anxiety, SDQ internalising, SDQ externalising
-# Covariates: sex, parental education, parental SES
 # ===============================
 
 # --- MFQ Models ---
