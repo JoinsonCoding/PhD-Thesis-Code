@@ -10,9 +10,9 @@ library(circular)
 
 ###############################################
 ### READ DATA
+### Data is main_data, which is participant
+### -level scores for Tweets 2010 to 2023.
 ###############################################
-
-main_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\main_df.csv")
 
 # Replace empty strings with NA for specific variables
 main_data$pre_finance[main_data$pre_finance == ""] <- NA
