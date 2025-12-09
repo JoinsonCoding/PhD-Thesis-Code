@@ -1,184 +1,203 @@
-# ------------------------------------------------
-# Emotion Dynamics Metrics: LIWC PosEmo Example
-# ------------------------------------------------
-# This script demonstrates how to link survey and Tweet data to calculate emotion metrics
-# (Chapter 6 application). The metrics shown focus on LIWC Positive Emotion scores.
-
+from datetime import timedelta
 import pandas as pd
 import numpy as np
-
-# -----------------------------------------------
-# Hourly Tweet Frequency Extraction
-# -----------------------------------------------
-
-def time_dataframe(data_f, id):
-    """
-    Returns per-hour Tweet counts for a participant.
-    - Filters to rows matching participant id ('linker').
-    - Builds dictionary: {hour: Tweet count}.
-    - Fills missing hours with 0s.
-    - Returns row-wise DataFrame for participant.
-    """
-    if id in data_f['linker'].unique():
-        df_filter = data_f[data_f['linker'] == id]
-        time_counts = df_filter.tweet_hour.value_counts()
-        keys = np.array(time_counts.index)
-        value = np.array(time_counts.values)
-        diction = {keys[i]: value[i] for i in range(len(keys))}
-        missing_times(diction, keys)
-        df_times = pd.DataFrame.from_dict(diction, orient='index').transpose()
-        df_times['linker'] = id
-        return df_times
-
-def missing_times(dic, keys):
-    """
-    Ensures all 24 hours (0-23) are present as keys in the output dictionary. Fills missing with 0.
-    """
-    for n in range(24):
-        if n not in keys:
-            dic[n] = 0
-    return dic
-
-# -----------------------------------------------
-# Create Participant-Level Tweet Metrics
-# -----------------------------------------------
-
-def data_gen(data_f, out_name):
-    """
-    Constructs wide-form DataFrame of hourly Tweet counts for all participants.
-    - Iterates through unique participant IDs (column 'linker').
-    - Calls time_dataframe for each, collects into list.
-    - Concatenates all into one big DataFrame with one row per participant.
-    - Assigns output to a global variable for further use.
-    """
-    id_list = np.array(data_f['linker'].unique())
-    frames = []
-    for item in id_list:
-        dt = time_dataframe(data_f, item)
-        frames.append(dt)
-    result = pd.concat(frames)
-    globals()[out_name] = result
-    return out_name
-
-# -----------------------------------------------
-# Data Linkage and LIWC PosEmo Metric Generation
-# -----------------------------------------------
-
-def final_generation(df, name):
-    """
-    Merges participant-level Tweet metrics with ALSPAC survey data, computes emotion metrics.
-
-    Workflow:
-    - Generates hourly Tweet counts ('final_df'), and total Tweets per participant.
-    - Adds participant row index ('row_num').
-    - Links Twitter metrics to survey data.
-    - Calculates emotion summary measures (LIWC PosEmo mean and SD), merges to linked data.
-    - Creates participant/generation label variables and saves CSV output.
-    """
-    data_gen(df, 'final_df')
-    global final_df
-    final_df = final_df[['linker'] + list(range(24))]
-    final_df['total_tweets'] = final_df.loc[:, range(24)].sum(axis=1)
-    final_df['row_num'] = np.arange(len(final_df))
-
-    # Merge with ALSPAC survey data
-    link = final_df[['linker', 'total_tweets']]
-    final_d = surv.merge(final_df)
-    final_d = final_d.sort_values(by='row_num')
-    
-    # --- LIWC PosEmo Metrics ---
-    # Fill missing values for LIWC Positive Emotion scores
-    df['epicosmliwcposemo'] = df['epicosmliwcposemo'].fillna(0)
-
-    # Participant-level mean LIWC PosEmo
-    pos_df = df.groupby('linker')['epicosmliwcposemo'].mean().reset_index()
-    pos_df.rename(columns={'epicosmliwcposemo': 'Mean Posemo Score'}, inplace=True)
-    final_d = pd.merge(final_d, pos_df)
-
-    # Participant-level standard deviation of LIWC PosEmo
-    poss_df = df.groupby('linker')['epicosmliwcposemo'].std().reset_index()
-    poss_df.rename(columns={'epicosmliwcposemo': 'Std Posemo Score'}, inplace=True)
-    final_d = pd.merge(final_d, poss_df)
-
-    # Construct participant labels and generation codes
-    final_d['aln'] = final_d['aln'].astype(str)
-    final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
-    final_d['generation'] = None
-    final_d.loc[final_d['qlet'].isin(['A', 'B']), 'generation'] = 'G1'
-    final_d.loc[final_d['qlet'].isin(['P', 'M']), 'generation'] = 'G0'
-    
-    print(final_d)
-    final_d.to_csv(f'C:/Users/ta20395/TD/Second Harvest Data/{name}.csv')
-
-final_generation(tl_df, 'final_df')
-
-# -----------------------------------------------
-# MSSD Emotion Dynamics Calculation
-# -----------------------------------------------
-
-# Please note: 'date' column for Tweets must be properly formatted (e.g. YYYY-MM-DD HH:MM:SS).
 
 no_gap = []
 
 def calculate_mssd(df, sentiment):
     """
-    Computes Mean Squared Successive Difference (MSSD), adjusted for time gaps.
-
-    Steps:
-    - Sorts Tweet data by date and averages sentiment for duplicate times.
-    - Calculates time differences (in hours) between consecutive Tweets.
-    - Computes squared differences in successive sentiment scores, divided by time-gap.
-    - Aggregates to final MSSD value, adjusted by median gap.
-
-    Returns: time-adjusted MSSD value for the participant.
+    Compute time-adjusted MSSD for a given sentiment variable.
+    Handles within-hour tweet clustering by spreading timestamps
+    evenly across each hour block.
+    Returns: (mssd_value, adjusted_dataframe)
     """
-    df = df.sort_values(by='date')
-    df = df.groupby('date', as_index=False)[sentiment].mean()
 
+    # Sort and prepare timestamps
+    df = df.sort_values(by='date').copy()
+    df['hour_group'] = df['date'].dt.floor('h')
+    df['n_in_hour'] = df.groupby('hour_group')['hour_group'].transform('count')
+
+    # Generate adjusted timestamps to avoid zero-time differences
+    adjusted_dates = []
+    for _, group in df.groupby('hour_group', sort=False):
+        n = len(group)
+        if n == 1:
+            adjusted_dates.extend(group['date'])
+        else:
+            interval = timedelta(seconds=int(3600 / n))
+            start_time = group['hour_group'].iloc[0]
+            fake_times = [start_time + i * interval for i in range(n)]
+            adjusted_dates.extend(fake_times)
+
+    df['adjusted_date'] = adjusted_dates
+
+    # Average sentiment values for identical adjusted timestamps
+    df = df.groupby('adjusted_date', as_index=False)[sentiment].mean()
+    df = df.rename(columns={'adjusted_date': 'date'})
+
+    # Compute time differences in hours
     df['time_diff'] = df['date'].diff()
     df['time_diff_float'] = df['time_diff'].dt.days * 24 + df['time_diff'].dt.seconds / 3600
+
+    # Track zero gaps for diagnostics
     gap = len(df.loc[df['time_diff_float'] == 0.0])
     no_gap.append(gap)
 
-    # Compute squared successive differences, adjusted for time gap
+    # Avoid zero-division
+    df['time_diff_float'] = df['time_diff_float'].replace(0.0, 0.01)
+
+    # Core MSSD calculation
     df['consecutive_sentiments_diff'] = ((df[sentiment] - df[sentiment].shift(1)) ** 2) / df['time_diff_float']
-    median_time_diff = df['time_diff_float'].median()
-    mssd_time_adjusted = df['consecutive_sentiments_diff'].sum() * (median_time_diff / (len(df) - 1))
-    return mssd_time_adjusted
 
-def apply_mssd(var, col_name, list_sent, data):
-    """
-    Computes participant-level MSSD values, appends to result list.
+    if len(df) > 1:
+        median_time_diff = df['time_diff_float'].median()
+        mssd_time_adjusted = df['consecutive_sentiments_diff'].sum() * (median_time_diff / (len(df) - 1))
+    else:
+        mssd_time_adjusted = np.nan
 
-    For each participant ('linker'):
-    - Extract their Tweet rows from full dataset.
-    - Calculate their sentiment MSSD score.
-    - Store result and id as dictionary in output list.
+    return mssd_time_adjusted, df
+
+# ==========================================
+# Function: apply_mssd
+# Purpose:  Compute the Mean Squared Successive Difference (MSSD)
+#           for a given sentiment variable within each participant.
+# Inputs:
+#   var        - Name of the sentiment variable to compute MSSD on
+#   col_name   - Name of the output column storing the MSSD value
+#   list_sent  - List that will accumulate dictionaries of results
+#   data       - Full tweet-level dataset
+#   debug      - If TRUE, returns timestamp-adjusted intermediate data
+# Outputs:
+#   Optionally returns debug data containing adjusted timestamps.
+# ==========================================
+
+def apply_mssd(var, col_name, list_sent, data, debug=False):
     """
+    Calculate MSSD for each participant and append results to list_sent.
+    If debug=True, also return a dict of adjusted timestamps for inspection.
+    """
+
+    # Store debugging outputs indexed by participant
+    debug_data = {}
+
+    # Iterate through each participant ID
     for participant_id in data['linker'].unique():
         participant_data = data[data['linker'] == participant_id]
-        mssd = calculate_mssd(participant_data, var)
-        list_sent.append({'linker': participant_id, col_name: mssd})
 
-def mssd_to_df(data, Q):
-    """
-    Produces a DataFrame of participant-level MSSD scores for LIWC PosEmo.
+        try:
+            # calculate_mssd() may return either a float OR a (float, dataframe) tuple
+            result = calculate_mssd(participant_data, var)
 
-    - Keeps only participants with duplicate 'linker' entries (suggesting sufficient data).
-    - Runs MSSD calculation, stores score in output DataFrame.
-    - Appends questionnaire label Q for context.
+            if isinstance(result, tuple):
+                mssd, df_adj = result
+
+                # Save timestamp-debugging info if requested
+                if debug:
+                    debug_data[participant_id] = df_adj
+            else:
+                mssd = result
+
+            # Append output for this participant
+            list_sent.append({'linker': participant_id, col_name: mssd})
+
+        except Exception as e:
+            # Log any errors for specific participants
+            print(f"⚠️ Error processing participant {participant_id} for {var}: {e}")
+            list_sent.append({'linker': participant_id, col_name: np.nan})
+
+    # Return debugging info if requested
+    if debug:
+        return debug_data
+
+
+# ==========================================
+# Function: mssd_to_df
+# Purpose:  Apply MSSD computation across all sentiment measures
+#           and return a merged participant-level DataFrame.
+# Inputs:
+#   data  - Tweet-level dataset
+#   Q     - Wave / questionnaire / timepoint identifier
+#   debug - If TRUE, returned object includes debugging information
+# Outputs:
+#   DataFrame with all MSSD columns merged by participant ID
+# ==========================================
+
+def mssd_to_df(data, Q, debug=False):
     """
+    Compute MSSD scores for all sentiment measures for a given dataset.
+    Returns: DataFrame (and optionally debug info with adjusted timestamps)
+    """
+
+    # Identify participants with multiple observations
     duplicates_mask = data.duplicated(subset='linker', keep=False)
     data = data[duplicates_mask]
-    if len(data) < 0:
-        print("No valid Tweets")
-    else:
-        mssd_scores_posemo = []
-        apply_mssd('epicosmliwcposemo', 'Posemo MSSD', mssd_scores_posemo, data)
-        df_mssd = pd.DataFrame(mssd_scores_posemo)
-        df_mssd['Q'] = Q
-        return df_mssd
 
-# Generate and merge participant emotion dynamics metric (Posemo MSSD) into analysis DataFrame
-mssd = mssd_to_df(tl_df, '1')
-pd.merge(final_df, mssd)
+    if len(data) == 0:
+        print("No valid Tweets")
+        return None
+
+    debug_all = {}
+
+    # --- RB Sentiment ---
+    mssd_scores_rb = []
+    dbg = apply_mssd('rbcompound', 'RB MSSD', mssd_scores_rb, data, debug=debug)
+    if debug:
+        debug_all['rbcompound'] = dbg
+
+    # --- LIWC compound ---
+    mssd_scores_liwc = []
+    apply_mssd('liwccompound', 'LIWC MSSD', mssd_scores_liwc, data)
+
+    # --- VADER compound ---
+    mssd_scores_vader = []
+    apply_mssd('epicosmvadercompound', 'VADER Compound MSSD', mssd_scores_vader, data)
+
+    # --- VADER positive ---
+    mssd_scores_vaderp = []
+    apply_mssd('epicosmvaderpositive', 'VP MSSD', mssd_scores_vaderp, data)
+
+    # --- VADER negative ---
+    mssd_scores_vadern = []
+    apply_mssd('epicosmvadernegative', 'VN MSSD', mssd_scores_vadern, data)
+
+    # --- LIWC Negative emotion ---
+    mssd_scores_negemo = []
+    apply_mssd('epicosmliwcnegemo', 'Negemo MSSD', mssd_scores_negemo, data)
+
+    # --- LIWC Positive emotion ---
+    mssd_scores_posemo = []
+    apply_mssd('epicosmliwcposemo', 'Posemo MSSD', mssd_scores_posemo, data)
+
+    # --- RB Negative probability ---
+    mssd_scores_neg = []
+    apply_mssd('rbnegative', 'Negative Prob MSSD', mssd_scores_neg, data)
+
+    # --- RB Positive probability ---
+    mssd_scores_pos = []
+    apply_mssd('rbpositive', 'Positive Prob MSSD', mssd_scores_pos, data)
+
+    # --- Combine all MSSD outputs into one DataFrame ---
+    dfs = [
+        pd.DataFrame(mssd_scores_rb),
+        pd.DataFrame(mssd_scores_liwc),
+        pd.DataFrame(mssd_scores_vader),
+        pd.DataFrame(mssd_scores_vaderp),
+        pd.DataFrame(mssd_scores_vadern),
+        pd.DataFrame(mssd_scores_negemo),
+        pd.DataFrame(mssd_scores_posemo),
+        pd.DataFrame(mssd_scores_neg),
+        pd.DataFrame(mssd_scores_pos)
+    ]
+
+    # Merge sequentially across all sentiment-based DataFrames
+    df = dfs[0]
+    for d in dfs[1:]:
+        df = pd.merge(df, d, on='linker', how='outer')
+
+    # Add timepoint identifier
+    df['Q'] = Q
+
+    if debug:
+        return df, debug_all
+    else:
+        return df
