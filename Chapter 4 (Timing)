@@ -12,10 +12,11 @@ library(partR2)
 
 ############################################################
 # READING AND PREPARING DATA
+# Data is time_data, which is built using Tweets posted
+# in 2-weeks before a COVID questionnaire
 ############################################################
 
 # Read the main dataset containing tweet timing and mental health scores
-time_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_cs.csv")
 
 # Recoding sex: Male = -1, Female = 1, then convert to factor
 time_data$sex[time_data$sex == "Male"]   <- -1
@@ -58,16 +59,12 @@ gad_time_data  <- time_data[complete.cases(time_data$gad_score), ]
 # 1) SMFQ model with time-of-day terms interacting with sex and generation
 smfq_all_int <- glmer(
   smfq_score ~ 
-    # First harmonic (24 h) by sex
     cos(Mean.Hour / 24 * 2 * pi) * sex +
     sin(Mean.Hour / 24 * 2 * pi) * sex +
-    # Second harmonic (12 h) by sex
     cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
     sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
-    # First harmonic by generation
     cos(Mean.Hour / 24 * 2 * pi) * generation +
     sin(Mean.Hour / 24 * 2 * pi) * generation +
-    # Second harmonic by generation
     cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
     sin(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
     # Random intercepts for individual and questionnaire wave
@@ -81,7 +78,7 @@ smfq_all_int <- glmer(
 # Model summary
 summary(smfq_all_int)
 
-# Semi-partial R2 for groups of time terms (by harmonic and sine/cosine, including interactions)
+# Partial R2 for groups of time terms (by harmonic and sine/cosine, including interactions)
 a <- partR2(
   smfq_all_int,
   partbatch = list(
@@ -117,7 +114,7 @@ partR2(
 )
 
 
-# 2) SMFQ model: time-of-day interacting only with sex (generation as main effect)
+# 2) SMFQ model: time-of-day interacting only with sex (generation as fixed effect)
 smfq_sex_int <- glmer(
   smfq_score ~ 
     cos(Mean.Hour / 24 * 2 * pi) * sex +
@@ -160,7 +157,7 @@ partR2(
 )
 
 
-# 3) SMFQ model: time-of-day interacting only with generation (sex as main effect)
+# 3) SMFQ model: time-of-day interacting only with generation (sex as fixed effect)
 smfq_gen_int <- glmer(
   smfq_score ~ 
     cos(Mean.Hour / 24 * 2 * pi) * generation +
@@ -220,7 +217,7 @@ smfq_noint <- glmer(
 
 summary(smfq_noint)
 
-# Semi-partial R2 for individual time-of-day Fourier terms
+# Partial R2 for individual time-of-day Fourier terms
 a <- partR2(
   smfq_noint,
   partvars = c(
@@ -680,7 +677,6 @@ gad_all_int <- glmer(
     sin(Mean.Hour / 24 * 2 * pi) * sex +
     cos(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
     sin(2 * (Mean.Hour / 24 * 2 * pi)) * sex +
-    sex + generation +  # baseline covariates
     cos(Mean.Hour / 24 * 2 * pi) * generation +
     sin(Mean.Hour / 24 * 2 * pi) * generation +
     cos(2 * (Mean.Hour / 24 * 2 * pi)) * generation +
