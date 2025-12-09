@@ -10,9 +10,9 @@ library(partR2)
 
 ############################################################
 #  LOAD AND PREPARE DATA
+# Data is sent_data, which is built using non-Retweets
+# posted in the year before COVID1 or COVID6
 ############################################################
-
-sent_data <- read.csv("C:\\Users\\ta20395\\TD\\Second Harvest Data\\all_sent.csv")
 
 # Convert sex to numeric-coded factor
 sent_data$sex[sent_data$sex == "Male"]   <- -1
