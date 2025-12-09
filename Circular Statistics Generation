@@ -3,10 +3,6 @@
 # -------------------------------------------------
 # This function computes the circular (angular) mean of Tweet posting times for each participant.
 # Intended for use with participant-level datasets where columns 0-23 represent Tweet counts for each hour.
-#
-# Application:
-# - Designed to be called within the final_generation linkage function.
-# - Generates participant-wise summary metrics for temporal Tweet behaviour.
 # -------------------------------------------------
 
 import math
@@ -63,52 +59,3 @@ def circ_mean_round(data_f, mean_ang):
             mean_ang.append(mean_angle)
         else:
             mean_ang.append(None)
-
-# -------------------------------------------------
-# Integration with Data Linkage and Saving Procedure
-# -------------------------------------------------
-
-def final_generation(df, name):
-    """
-    Runs participant-level metric generation, including circular mean, for Tweet time window analysis.
-
-    Steps:
-    - Generates hourly Tweet count columns and total Tweet counts ('total_tweets').
-    - Adds row tracking variable ('row_num').
-    - Runs circular mean calculation per participant (via circ_mean_round).
-    - Adds mean angle as new column to dataframe.
-    - Merges enriched Tweet metrics with ALSPAC survey data and generates participant/generation labels.
-    - Saves final merged dataset to disk.
-    """
-    data_gen(df, 'final_df')
-    global final_df
-    # Keep linker and Tweet counts for hours 0-23
-    final_df = final_df[['linker'] + list(range(24))]
-    
-    # Calculate total Tweets per participant
-    final_df['total_tweets'] = final_df.loc[:, range(24)].sum(axis=1)
-    
-    # Row number for reference
-    final_df['row_num'] = np.arange(len(final_df))
-    
-    # ---- Circular Mean Calculation ----
-    mean_ang = []
-    circ_mean_round(final_df, mean_ang)
-    final_df['Mean Angle'] = mean_ang    # New column for mean posting angle
-    
-    # Prepare linkage and saving
-    link = final_df[['linker','Mean Angle', 'total_tweets']]
-    final_d = surv.merge(final_df)
-    final_d = final_d.sort_values(by=['row_num'])
-    
-    # Compose participant linkage labels
-    final_d['aln'] = final_d['aln'].astype(str)
-    final_d['linker'] = final_d['aln'] + ' ' + final_d['qlet']
-    
-    # Assign generation classification
-    final_d['generation'] = None
-    final_d.loc[final_d['qlet'].isin(['A', 'B']), 'generation'] = 'G1'
-    final_d.loc[final_d['qlet'].isin(['P', 'M']), 'generation'] = 'G0'
-    
-    print(final_d)
-    final_d.to_csv(f'C:/Users/ta20395/TD/Second Harvest Data/{name}.csv')
